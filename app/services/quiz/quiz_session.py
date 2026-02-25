@@ -231,20 +231,17 @@ class QuizSessionService:
         participant_rows = await self.participant_repo.get_participant_list(session_id)
         rows_by_id = {int(row["participant_id"]): row for row in participant_rows}
 
-        total_questions = await self.attempt_repo.get_total_questions(session.quiz_id)
-
         results = []
         for participant in participants:
             attempt = await self.attempt_repo.get_or_create(
                 session_id=session_id,
                 participant_id=participant.id,
             )
-            answered_questions = await self.attempt_repo.get_answer_count(attempt.id)
-            correct_answers = await self.attempt_repo.get_correct_answer_count(attempt.id)
-            wrong_answers = max(answered_questions - correct_answers, 0)
-
-            attempt.score = correct_answers
-            attempt.current_question = min(answered_questions + 1, max(total_questions, 1))
+            stats = await self._build_attempt_result(
+                session_id=session_id,
+                quiz_id=session.quiz_id,
+                attempt=attempt,
+            )
 
             row = rows_by_id.get(participant.id, {})
             results.append(
@@ -255,10 +252,10 @@ class QuizSessionService:
                     "is_host": participant.is_host,
                     "first_name": row.get("first_name"),
                     "last_name": row.get("last_name"),
-                    "total_questions": total_questions,
-                    "answered_questions": answered_questions,
-                    "correct_answers": correct_answers,
-                    "wrong_answers": wrong_answers,
+                    "total_questions": stats["total_questions"],
+                    "answered_questions": stats["answered_questions"],
+                    "correct_answers": stats["correct_answers"],
+                    "wrong_answers": stats["wrong_answers"],
                     "score": attempt.score,
                     "finished": attempt.finished,
                 }
