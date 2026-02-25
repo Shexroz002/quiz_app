@@ -1,0 +1,85 @@
+services:
+  quiz-redis:
+    image: redis:7-alpine
+    container_name: quiz-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - quiz-network
+
+  quiz-db:
+    image: postgres:15.6-alpine
+    container_name: quiz-db
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - quiz-network
+
+  quiz_back:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    container_name: quiz_back
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      quiz-db:
+        condition: service_healthy
+      quiz-redis:
+        condition: service_started
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - quiz-network
+  quiz_celery:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    container_name: quiz_celery
+    env_file:
+      - .env
+    depends_on:
+      quiz-db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      celery -A app.core.celery_app worker
+      --loglevel=info
+      --concurrency=2
+      -Q celery,pdf_ai_queue
+    networks:
+      - quiz-network
+
+volumes:
+  redis_data:
+  postgres_data:
+
+networks:
+  quiz-network:
+    driver: bridge

@@ -1,0 +1,1 @@
+from .quiz_tasks import process_pdf_task
