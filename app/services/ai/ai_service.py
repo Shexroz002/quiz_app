@@ -14,7 +14,7 @@ class AIQuizParser:
 
     def __init__(self, api_key: Optional[str] = None):
         self.client = Client(
-            api_key="AIzaSyB-VrIXc9d5Sb4QWuIJz0Zzq1yQ6OlZjlk"
+            api_key="AIzaSyBKBVgVGSS1nAwCSq-aPi9mlgmpI4kir54"
         )
         self.prompt = prompt
         self.quiz_schema=QUIZ_SCHEMA

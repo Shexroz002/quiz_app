@@ -22,14 +22,14 @@ async def _authenticate_websocket(websocket: WebSocket) -> User | None:
         return None
 
     payload = decode_token(token)
-    username = payload.get("sub") if payload else None
-    if not username:
+    user_id = payload.get("sub") if payload else None
+    if not user_id:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
         return None
 
     async with AsyncSessionLocal() as db:
         user_repo = UserRepository(db)
-        user = await user_repo.get_by_username(username)
+        user = await user_repo.get_by_id(int(user_id))
         if not user:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="User not found")
             return None
