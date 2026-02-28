@@ -39,7 +39,7 @@ class QuizSessionService:
         answered_questions = await self.attempt_repo.get_answer_count(attempt.id)
         correct_answers = await self.attempt_repo.get_correct_answer_count(attempt.id)
         wrong_answers = max(answered_questions - correct_answers, 0)
-
+        topic_statistic = await self.attempt_repo.get_question_topic_statistic(quiz_id,attempt.id)
         attempt.score = correct_answers
         attempt.current_question = min(answered_questions + 1, max(total_questions, 1))
 
@@ -51,6 +51,7 @@ class QuizSessionService:
             "correct_answers": correct_answers,
             "wrong_answers": wrong_answers,
             "score": attempt.score,
+            "topic_statistic":topic_statistic,
             "finished": attempt.finished,
         }
 
@@ -268,6 +269,39 @@ class QuizSessionService:
             reverse=True,
         )
         return results
+
+    async def topic_statistic(self, session_id: int, user: User):
+        session = await self.session_repo.get_by_id(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        participant = await self.participant_repo.get_by_session_user(session_id, user.id)
+        if not participant:
+            raise HTTPException(status_code=403, detail="User is not a participant of this session")
+
+        attempt = await self.attempt_repo.get_or_create(
+            session_id=session_id,
+            participant_id=participant.id,
+        )
+
+        topic_rows = await self.attempt_repo.get_question_topic_statistic(
+            quiz_id=session.quiz_id,
+            attempt_id=attempt.id,
+        )
+
+        formatted = []
+        for row in topic_rows:
+            topic_name = row["topic_name"] or "Unknown"
+            formatted.append(
+                {
+                    topic_name: {
+                        "total_topic_quession": int(row["total_topic_question"]),
+                        "correct_answer": int(row["correct_answer"]),
+                    }
+                }
+            )
+
+        return formatted
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:

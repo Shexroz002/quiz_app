@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.api.router import api_router
+from app.websocket import quiz_session_ws_router
 
 app = FastAPI(title="Test Platform API")
 app.mount("/media", StaticFiles(directory="media"), name="media")
@@ -15,6 +16,7 @@ app.add_middleware(
     allow_headers=["*"],  # headerlarga ruxsat
 )
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(quiz_session_ws_router)
 
 @app.get("/")
 async def root():

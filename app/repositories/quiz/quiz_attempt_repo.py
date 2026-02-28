@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AttemptAnswer, Option, Question, QuizAttempt, SessionParticipant
@@ -111,3 +111,32 @@ class QuizAttemptRepository:
         )
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
+
+    async def get_question_topic_statistic(self, quiz_id: int, attempt_id: int):
+        stmt = (
+            select(
+                Question.topic.label("topic_name"),
+                func.count(Question.id).label("total_questions"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (AttemptAnswer.is_correct.is_(True), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("correct_answers"),
+            )
+            .outerjoin(
+                AttemptAnswer,
+                and_(
+                    AttemptAnswer.question_id == Question.id,
+                    AttemptAnswer.attempt_id == attempt_id,
+                ),
+            )
+            .where(Question.quiz_id == quiz_id)
+            .group_by(Question.topic)
+            .order_by(Question.topic)
+        )
+        result = await self.db.execute(stmt)
+        return result.mappings().all()

@@ -4,7 +4,7 @@ import re
 import time
 import logging
 from typing import Optional
-from app.services.ai.promt import prompt
+from app.services.ai.promt import prompt, QUIZ_SCHEMA
 from google.genai import Client
 
 logger = logging.getLogger(__name__)
@@ -14,9 +14,10 @@ class AIQuizParser:
 
     def __init__(self, api_key: Optional[str] = None):
         self.client = Client(
-            api_key="AIzaSyANtKj72-J5hNdTyZZ0COD11I0XO-JcIkc"
+            api_key="AIzaSyB-VrIXc9d5Sb4QWuIJz0Zzq1yQ6OlZjlk"
         )
         self.prompt = prompt
+        self.quiz_schema=QUIZ_SCHEMA
 
     @staticmethod
     def extract_json(text: str) -> str:
@@ -75,26 +76,20 @@ class AIQuizParser:
             response = self.client.models.generate_content(
                 model="gemini-3-flash-preview",
                 contents=[self.prompt, uploaded_file],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": self.quiz_schema,
+                }
             )
 
-            raw_text = response.text
             logger.info("✅ Model javobi olindi")
 
-            # ---------- extract ----------
             try:
-                clean_json = json.loads(raw_text)
-                print("Direct JSON parse successful!")
-            except json.JSONDecodeError:
-                print("Direct JSON parse failed")
-                #text file save
-                file_name = pdf_path.split("/")[-1].split(".")[0]
-                text_file = f'media/quiz/txt/{file_name}.txt'
-                logger.info("📂 Saving raw text to: %s", text_file)
-                with open(text_file, "w", encoding="utf-8") as f:
-                    f.write(raw_text)
-                clean_json = self.extract_json(raw_text)
-            print("Extracted JSON:", clean_json)
-            return clean_json
+                result = json.loads(response.text)
+                print("✅ JSON muvaffaqiyatli ajratildi")
+            except Exception as e:
+                raise ValueError(f"JSON parsing error: {e}\nRaw response: {response.text}")
+            return result
 
         except Exception as e:
             logger.exception(f"❌ PDF parse error with {e}",)

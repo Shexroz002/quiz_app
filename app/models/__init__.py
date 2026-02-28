@@ -8,3 +8,5 @@ from app.models.quiz.real_time_quiz.quiz_session import QuizSession
 from app.models.quiz.real_time_quiz.session_participant import SessionParticipant
 from app.models.quiz.real_time_quiz.quiz_attempt import QuizAttempt
 from app.models.quiz.real_time_quiz.attempt_answer import AttemptAnswer
+from app.models.science.school_subject import Subject
+from app.models.account.user_subject import UserSubject

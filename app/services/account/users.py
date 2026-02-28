@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.repositories.account import UserRepository
-from app.services.account.auth_service import AuthService
 from app.services.base import BaseService
 
 

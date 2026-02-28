@@ -1,8 +1,11 @@
 from typing import Annotated
-from pydantic import Field,model_serializer, field_validator
+from pydantic import Field, model_serializer, field_validator
 
 from app.core.security.password_hash import hash_password
+from app.models import Subject
+from app.models.account.user import UserType
 from app.schemas.account.auth.login import LoginSchema
+from app.schemas.subject.subject import SubjectIdListSchema
 
 
 class RegisterSchema(LoginSchema):
@@ -21,6 +24,14 @@ class RegisterSchema(LoginSchema):
             max_length=50,
             description="Last name should be between 2 and 50 characters"
         )
+    ]
+    subjects: Annotated[
+        list[SubjectIdListSchema],
+        Field(description="List of subject ids")
+    ]
+    role: Annotated[
+        UserType,
+        Field(description="Role of the user")
     ]
 
     @field_validator("username", mode="before")
@@ -42,5 +53,3 @@ class RegisterSchema(LoginSchema):
             "password_hash": hash_password(self.password)
 
         }
-
-

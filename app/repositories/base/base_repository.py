@@ -20,13 +20,10 @@ class BaseRepository(Generic[ModelType]):
         result = await self.db.execute(select(self.model))
         return result.scalars().all()
 
-    async def create(self, obj_data: dict,commit:bool=True) -> ModelType:
+    async def create(self, obj_data: dict) -> ModelType:
         obj = self.model(**obj_data)
         self.db.add(obj)
         await self.db.flush()
-        if commit:
-            await self.db.commit()
-            await self.db.refresh(obj)
         return obj
 
     async def delete(self, obj: ModelType):

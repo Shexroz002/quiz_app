@@ -5,7 +5,7 @@ from app.models import User
 from app.schemas.quiz.quiz import QuizListSchema, QuizUpdateSchema
 from app.services.quiz.quiz_service import get_quiz_service
 
-quiz_router = APIRouter(prefix="")
+quiz_router = APIRouter(prefix="", tags=["Quiz Management"])
 
 
 @quiz_router.get("/list/", response_model=List[QuizListSchema])

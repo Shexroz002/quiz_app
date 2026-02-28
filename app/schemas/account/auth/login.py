@@ -1,6 +1,8 @@
 from typing import Annotated
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
+from app.schemas.account.users import UserShortInfoSchema
+
 
 class LoginSchema(BaseModel):
     model_config = ConfigDict(
@@ -29,3 +31,16 @@ class LoginSchema(BaseModel):
     @classmethod
     def _lower_username(cls, v: str) -> str:
         return v.lower()
+
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class LoginResponse(TokenResponse):
+    user: UserShortInfoSchema

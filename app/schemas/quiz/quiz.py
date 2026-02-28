@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.schemas.quiz.question import QuestionBase
 
 
@@ -13,8 +13,7 @@ class QuizListSchema(QuizBase):
 class QuizDetailSchema(QuizBase):
     questions: list[QuestionBase]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizUpdateSchema(BaseModel):
     title: str

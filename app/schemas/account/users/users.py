@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 
 class UserListSchema(BaseModel):
@@ -35,7 +35,9 @@ class UpdateUserSchema(BaseModel):
 class UserShortInfoSchema(BaseModel):
     id: int
     username: str
+    first_name: str
+    last_name: str
+    role: str|None=None
     profile_image: str | None = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

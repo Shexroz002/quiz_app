@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -11,6 +13,12 @@ class SubmitAnswerResponse(BaseModel):
     selected_option: str
 
 
+
+class TopicStatisticSchema(BaseModel):
+    topic_name:str
+    total_questions: int
+    correct_answers: int
+
 class FinishQuizResponse(BaseModel):
     session_id: int
     attempt_id: int
@@ -20,6 +28,7 @@ class FinishQuizResponse(BaseModel):
     wrong_answers: int
     score: int
     finished: bool
+    topic_statistic:List[TopicStatisticSchema]
 
 
 class ParticipantResultResponse(BaseModel):

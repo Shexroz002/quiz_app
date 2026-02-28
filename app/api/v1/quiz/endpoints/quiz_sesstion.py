@@ -84,3 +84,12 @@ async def host_participant_results(
     quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.get_all_participant_results(session_id, current_user)
+
+
+@quiz_session_router.get("/{session_id}/topic-statistic/")
+async def topic_statistic(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.topic_statistic(session_id, current_user)
