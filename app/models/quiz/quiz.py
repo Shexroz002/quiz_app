@@ -7,6 +7,7 @@ class Quiz(BaseModel):
     __tablename__ = "quizzes"
 
     title: Mapped[str] = mapped_column(String(255))
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     questions = relationship(
         "Question",
@@ -17,6 +18,7 @@ class Quiz(BaseModel):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
     )
+    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     sessions = relationship("QuizSession", back_populates="quiz")
 

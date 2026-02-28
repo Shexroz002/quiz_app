@@ -8,7 +8,6 @@ from app.core.database.base import get_db
 from app.models.quiz import Quiz, Question, Option, QuestionImage
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.services.pdf.pdf_service import PDFService
-from app.websocket.notification_manager import notification_manager
 
 
 class QuizService:
@@ -32,6 +31,12 @@ class QuizService:
         def conver_list_do_dict(lst):
             return {item['id']: item['label'] for item in lst}
         return conver_list_do_dict(await self.repo.quiz_answer_by_id(quiz_id))
+
+    async def quiz_list(self,user_id,**kwargs):
+        return await self.repo.quiz_list(user_id,**kwargs)
+
+    async def detail(self,user_id, quiz_id):
+        return await self.repo.detail(user_id, quiz_id)
 
 
 def get_quiz_service(db: AsyncSession = Depends(get_db)) -> QuizService:
@@ -66,7 +71,6 @@ async def save_quiz_from_json(db: AsyncSession, data: dict, pdf_path: str,user_i
                     )
                 )
 
-            # ---------- options ----------
             for opt in q.get("options", []):
                 db.add(
                     Option(

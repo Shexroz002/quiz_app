@@ -16,9 +16,15 @@ class QuestionImageBase(BaseModel):
         return f"{BASE_URL}/{value}"
 
 
-
 class QuestionBase(BaseModel):
-    question_text: str
+    id: int= None
+    question_text: str = None
+
+class QuestionListSchema(QuestionBase):
+    topic: str = None
+
+
+class QuestionDetail(BaseModel):
     subject: Optional[str] = None
     table_markdown: Optional[str] = None
     difficulty: Optional[str] = None

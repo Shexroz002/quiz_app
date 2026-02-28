@@ -7,11 +7,17 @@ from app.repositories.base.base_repository import BaseRepository
 
 
 class QuestionRepository(BaseRepository):
-        def __init__(self, db: AsyncSession):
-            super().__init__(Question, db)
+    def __init__(self, db: AsyncSession):
+        super().__init__(Question, db)
 
-
-        async def get_quiz_with_option(self,quiz_id):
-            stmt = select(Question).where(Question.quiz_id == quiz_id).options(selectinload(Question.options))
-            result = await self.db.execute(stmt)
-            return result.scalars().all()
+    async def detail(self, question_id: int, user_id: int):
+        stmt = (
+            select(Question)
+            .where(Question.id == question_id, Question.quiz.has(user_id=user_id))
+            .options(
+                selectinload(Question.options),
+                selectinload(Question.images),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()

@@ -1,5 +1,3 @@
-# models/__init__.py da:
-from app.models.base import Base
 from app.models.account.user import User
 from app.models.quiz.quiz import Quiz
 from app.models.quiz.question import Question, QuestionImage
@@ -10,3 +8,4 @@ from app.models.quiz.real_time_quiz.quiz_attempt import QuizAttempt
 from app.models.quiz.real_time_quiz.attempt_answer import AttemptAnswer
 from app.models.science.school_subject import Subject
 from app.models.account.user_subject import UserSubject
+from app.models.account.contact import Contact
