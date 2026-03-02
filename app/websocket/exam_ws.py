@@ -5,36 +5,15 @@ from json import JSONDecodeError
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
 from app.core.database.base import AsyncSessionLocal
-from app.core.security.jwt import decode_token
-from app.models import User
-from app.repositories.account.user_repo import UserRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.websocket.manager import session_ws_manager
+from app.websocket.utils.auth_ws import authenticate_websocket
 
 quiz_session_ws_router = APIRouter(tags=["Quiz Session WebSocket"])
 
 
-async def _authenticate_websocket(websocket: WebSocket) -> User | None:
-    token = websocket.query_params.get("token")
-    if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token is required")
-        return None
 
-    payload = decode_token(token)
-    user_id = payload.get("sub") if payload else None
-    if not user_id:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
-        return None
-
-    async with AsyncSessionLocal() as db:
-        user_repo = UserRepository(db)
-        user = await user_repo.get_by_id(int(user_id))
-        if not user:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="User not found")
-            return None
-
-        return user
 
 
 async def _is_authorized_for_session(user_id: int, session_id: int) -> bool:
@@ -54,7 +33,7 @@ async def _is_authorized_for_session(user_id: int, session_id: int) -> bool:
 # WebSocket endpoint for quiz session participation and real-time updates
 @quiz_session_ws_router.websocket("/ws/quiz/sessions/{session_id}")
 async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
-    user = await _authenticate_websocket(websocket)
+    user = await authenticate_websocket(websocket)
     if not user:
         return
 

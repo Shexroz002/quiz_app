@@ -43,13 +43,25 @@ def get_quiz_service(db: AsyncSession = Depends(get_db)) -> QuizService:
     return QuizService(db)
 
 
-async def save_quiz_from_json(db: AsyncSession, data: dict, pdf_path: str,user_id:int) -> int:
+async def save_quiz_from_json(
+    db: AsyncSession,
+    data: dict,
+    pdf_path: str,
+    user_id: int
+) -> tuple[int, int]:
     try:
-        quiz = Quiz(title=data["quiz_title"], user_id=user_id)
+        quiz = Quiz(
+            title=data["quiz_title"],
+            user_id=user_id
+        )
         db.add(quiz)
         await db.flush()
+
         pdf_server = PDFService()
         pdf_images = await pdf_server.extract_images(pdf_path)
+
+        question_count = 0
+
         for q in data["questions"]:
             question = Question(
                 quiz_id=quiz.id,
@@ -63,11 +75,11 @@ async def save_quiz_from_json(db: AsyncSession, data: dict, pdf_path: str,user_i
             await db.flush()
 
             for img_url in q.get("images", []):
-                img_url = re.sub(r"[\[\]\"]", "", img_url)
+                img_url = re.sub(r'[\[\]\"]', "", img_url)
                 db.add(
                     QuestionImage(
                         question_id=question.id,
-                        image_url=pdf_images.get(img_url) or 'http://localhost:8000/'
+                        image_url=pdf_images.get(img_url) or "http://localhost:8000/"
                     )
                 )
 
@@ -81,12 +93,13 @@ async def save_quiz_from_json(db: AsyncSession, data: dict, pdf_path: str,user_i
                     )
                 )
 
+            question_count += 1
+
         await db.commit()
+        return quiz.id, question_count
 
-        # Send notification to user about quiz creation via websocket
-
-        return quiz.id
     except Exception as e:
         await db.rollback()
-        logging.exception("Failed to save quiz from JSON with data: %s", e)
+        logging.exception("Failed to save quiz from JSON: %s", e)
+        raise
 

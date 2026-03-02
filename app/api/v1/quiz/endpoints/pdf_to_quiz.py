@@ -1,30 +1,56 @@
-import uuid
-import os
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException
-from app.services.pdf.tasks.quiz_tasks import process_pdf_task
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.database.base import get_db
+from app.models.quiz import PDFJob
+from app.services.pdf.pdf_job_service import PDFJobService
+from app.services.pdf.storage_service import StorageService
 from app.api.v1.auth.dependencies.current_user import get_current_user
 from app.models import User
 
-pdf_to_quiz_router = APIRouter(tags=["PDF to Quiz"])
-UPLOAD_DIR= "media/quiz/file"
+pdf_to_quiz_router = APIRouter(prefix="/jop", tags=["PDF Jobs"])
 
-@pdf_to_quiz_router.post("/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...),current_user: User = Depends(get_current_user),):
 
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(400, "Faqat PDF yuklash mumkin")
+@pdf_to_quiz_router.post("/pdf-jobs")
+async def create_pdf_job(
+        file: UploadFile = File(...),
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+):
+    storage = StorageService(
+        upload_dir=settings.UPLOAD_DIR,
+        max_size_bytes=settings.MAX_PDF_SIZE,
+    )
+    service = PDFJobService(db=db, storage=storage)
 
-    file_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, f"{file_id}.pdf")
-
-    content = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
-
-    task = process_pdf_task.delay(file_path, current_user.id)
+    job = await service.create_job_and_queue(file=file, user_id=current_user.id)
 
     return {
-        "status": "queued",
-        "task_id": task.id,
-        "file_id": file_id,
+        "job_id": str(job.id),
+        "status": job.status.value,
+        "progress": job.progress,
+        "message": job.message,
+        "task_id": job.celery_task_id
+    }
+
+
+@pdf_to_quiz_router.get("/jobs/{job_id}")
+async def get_pdf_job_status(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(PDFJob, job_id)
+    if not job or job.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Job topilmadi")
+
+    return {
+        "job_id": str(job.id),
+        "status": job.status,
+        "progress": job.progress,
+        "message": job.message,
+        "quiz_id": job.quiz_id,
+        "question_count": job.question_count,
+        "error": job.error,
     }

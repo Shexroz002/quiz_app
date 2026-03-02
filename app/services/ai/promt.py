@@ -1,4 +1,4 @@
-prompt = """
+QUIZ_PROMPT = """
 You are an AI system that extracts structured test data from a PDF file.
 TASK:
 Analyze ALL test questions contained in the provided PDF and convert them into the EXACT structured JSON format defined below.
