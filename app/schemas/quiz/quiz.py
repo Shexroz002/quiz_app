@@ -22,7 +22,7 @@ class QuizDetailSchema(QuizBase):
     subject: str | None = None
     questions:list[QuestionListSchema] = []
 
-    # model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizUpdateSchema(BaseModel):
     title: str

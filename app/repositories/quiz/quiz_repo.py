@@ -75,7 +75,7 @@ class QuizRepository:
         result = await self.db.execute(stmt)
         return result.mappings().all()
 
-    async def quiz_list(self,user_id, **kwargs):
+    async def quiz_list(self, user_id, **kwargs):
         """
         Get a list of all quizzes
         Searchable by title,subject
@@ -119,7 +119,7 @@ class QuizRepository:
                 ((func.now() - Quiz.created_at) < text("interval '7 days'")).label("is_new"),
             )
             .select_from(Quiz)
-            .outerjoin(Question, Question.quiz_id == Quiz.id) 
+            .outerjoin(Question, Question.quiz_id == Quiz.id)
             .where(and_(*conditions))
             .group_by(
                 Quiz.id,
@@ -134,16 +134,16 @@ class QuizRepository:
         result = await self.db.execute(stmt)
         return result.mappings().all()
 
-    async def detail(self, user_id,quiz_id):
-
+    async def detail(self, user_id, quiz_id):
 
         stmt = (
             select(Quiz)
             .options(selectinload(Quiz.questions))
-            .where(Quiz.id == quiz_id)
+            .where(Quiz.id == quiz_id, Quiz.user_id == user_id)
         )
 
-        quiz = (await self.db.execute(stmt)).scalars().first()
+        quiz = await self.db.execute(stmt)
+        quiz = quiz.scalar_one_or_none()
         if not quiz:
             raise HTTPException(404, "Quiz not found")
 

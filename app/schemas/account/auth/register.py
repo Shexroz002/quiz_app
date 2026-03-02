@@ -5,7 +5,7 @@ from app.core.security.password_hash import hash_password
 from app.models import Subject
 from app.models.account.user import UserType
 from app.schemas.account.auth.login import LoginSchema
-from app.schemas.subject.subject import SubjectIdListSchema
+from app.schemas.subject.subject import SubjectBase
 
 
 class RegisterSchema(LoginSchema):
@@ -26,7 +26,7 @@ class RegisterSchema(LoginSchema):
         )
     ]
     subjects: Annotated[
-        list[SubjectIdListSchema],
+        list[SubjectBase],
         Field(description="List of subject ids")
     ]
     role: Annotated[

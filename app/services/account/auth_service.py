@@ -8,6 +8,7 @@ from app.core.database.base import get_db
 from app.core.security.jwt import create_access_token, create_refresh_token
 from app.core.security.password_hash import verify_password, hash_password
 from app.models import UserSubject
+from app.models.account.user import UserType
 from app.repositories.account import UserRepository
 from app.repositories.account import UserSubjectRepository
 
@@ -65,21 +66,23 @@ class AuthService:
 
     async def register(self, schema):
 
-        existing = await self.repo.get_by_username(
-            schema.username
-        )
+        existing = await self.repo.get_by_username(schema.username)
 
         if existing:
-            raise HTTPException(400, "Username already taken")
+            raise HTTPException(status_code=400, detail="Username already taken")
+
+        try:
+            role_value = UserType(schema.role) if schema.role else UserType.student
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid role type")
 
         user_data = {
             "username": schema.username,
             "first_name": schema.first_name,
             "last_name": schema.last_name,
             "password_hash": hash_password(schema.password),
+            "role": role_value,
         }
-        if schema.role:
-            user_data['role'] = schema.role
 
         subjects = schema.subjects
 
@@ -97,9 +100,9 @@ class AuthService:
 
             return user
 
-        except Exception:
+        except Exception as e:
             await self.db.rollback()
-            raise HTTPException(400, "Failed to register user")
+            raise HTTPException(400, f"Failed to register user: {str(e)}")
 
     async def get_user_by_id(self, user_id: int):
         user = await self.repo.get_by_id(user_id)

@@ -41,7 +41,8 @@ class User(BaseModel):
     quiz_participation = relationship("SessionParticipant", back_populates="user")
     quizzes = relationship("Quiz", back_populates="user")
     subjects = relationship("UserSubject", back_populates="user")
-    contacts = relationship("Contact", back_populates="friend")
+    contacts = relationship("Contact", back_populates="friend", foreign_keys="Contact.friend_id")
+    contact_of = relationship("Contact", back_populates="friend", foreign_keys="Contact.user_id")
 
     def __str__(self):
         return f"<User(username={self.username})>"

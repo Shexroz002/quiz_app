@@ -15,8 +15,8 @@ class Subject(BaseModel):
         nullable=False,
         index=True
     )
-
-    # Reletion Model
+    type: Mapped[str] = mapped_column(String(100), nullable=True)
+    icon: Mapped[str] = mapped_column(String(25), nullable=True)
 
     users = relationship("UserSubject", back_populates="subject")
 
