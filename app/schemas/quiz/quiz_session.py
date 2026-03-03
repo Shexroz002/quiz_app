@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.quiz.question import QuestionDetail, QuestionDetailWithoutCorrect
+
 
 class QuizSessionCreate(BaseModel):
     quiz_id: int
@@ -34,3 +36,18 @@ class StartSessionResponse(BaseModel):
     finished_at: datetime | None
     participants_count: int
     attempts_created: int
+
+
+class StartSessionSinglePlayerBaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: int
+    quiz_id: int
+
+
+class StartSessionSinglePlayerResponse(StartSessionSinglePlayerBaseResponse):
+    status: str
+    questions_count: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    questions: list[QuestionDetailWithoutCorrect]

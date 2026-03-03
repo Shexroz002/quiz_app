@@ -41,3 +41,18 @@ class QuizSessionRepository:
         quiz_session.finished_at = now + timedelta(minutes=quiz_session.duration_minutes)
         await self.db.flush()
         return quiz_session
+
+    async def get_single_player_session(self, session_id: int, host_id: int) -> QuizSession | None:
+        stmt = select(QuizSession).where(
+            QuizSession.id == session_id,
+            QuizSession.host_id == host_id,
+            QuizSession.status == "running",
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    # get only questions list for quiz session
+    """
+    return list of questions for quiz session. questions must include question text,image,table, user answer options and correct answer
+    """
+

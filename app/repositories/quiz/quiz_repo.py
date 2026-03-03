@@ -48,6 +48,37 @@ class QuizRepository:
         return quiz
 
     async def get_quiz_full_info(self, quiz_id):
+        """Get quiz with all questions and options
+        returns like [
+            {
+                "id": 1,
+                "title": "Quiz 1",
+                "user_id": 1,
+                "created_at": "2024-06-01T12:00:00",
+                "description": "A sample quiz",
+                "subject": "Math",
+                "questions": [
+                    {
+                        "id": 1,
+                        "text": "What is 2+2?",
+                        "options": [
+                            {"id": 1, "label": "3", "is_correct": False},
+                            {"id": 2, "label": "4", "is_correct": True},
+                            {"id": 3, "label": "5", "is_correct": False},
+                        ],
+                        "images": [
+                            {"id": 1, "url": "http://example.com/image1.png"},
+                            {"id": 2, "url": "http://example.com/image2.png"},
+                        ],
+                    },
+                    ...
+                ],
+            },
+            ...
+         ]
+         Note: is_correct field should be excluded in response, it's included here for demonstration purposes only
+
+        """
         stmt = (
             select(Quiz)
             .where(Quiz.id == quiz_id)

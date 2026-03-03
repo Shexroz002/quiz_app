@@ -1,4 +1,4 @@
-from app.schemas.quiz.options import OptionBase
+from app.schemas.quiz.options import OptionBase, OptionWithoutCorrect
 from pydantic import BaseModel, field_serializer
 from typing import Optional, List
 
@@ -25,7 +25,9 @@ class QuestionListSchema(QuestionBase):
 
 
 class QuestionDetail(BaseModel):
+    id:int
     subject: Optional[str] = None
+    question_text: Optional[str] = None
     table_markdown: Optional[str] = None
     difficulty: Optional[str] = None
     topic: Optional[str] = None
@@ -33,3 +35,5 @@ class QuestionDetail(BaseModel):
     options: list[OptionBase]
 
 
+class QuestionDetailWithoutCorrect(QuestionDetail):
+    options: list[OptionWithoutCorrect]

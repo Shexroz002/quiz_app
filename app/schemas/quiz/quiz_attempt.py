@@ -1,12 +1,15 @@
 from typing import List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SubmitAnswerRequest(BaseModel):
     question_id: int
     selected_option: str
 
+class AnswerItem(BaseModel):
+    question_id: int
+    selected_option: str = Field(..., pattern="^[ABCD]$")
 
 class SubmitAnswerResponse(BaseModel):
     question_id: int
@@ -26,6 +29,7 @@ class FinishQuizResponse(BaseModel):
     answered_questions: int
     correct_answers: int
     wrong_answers: int
+    spend_time: int
     score: int
     finished: bool
     topic_statistic:List[TopicStatisticSchema]

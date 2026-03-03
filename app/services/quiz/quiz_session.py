@@ -1,11 +1,13 @@
 import random
 import string
+from datetime import datetime
 
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.models import User
+from app.repositories.quiz.question_repo import QuestionRepository
 from app.repositories.quiz.quiz_attempt_repo import QuizAttemptRepository
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
@@ -23,6 +25,7 @@ class QuizSessionService:
         self.db = db
         self.quiz_repo = QuizRepository(db)
         self.session_repo = QuizSessionRepository(db)
+        self.question_repo = QuestionRepository(db)
         self.participant_repo = SessionParticipantRepository(db)
         self.attempt_repo = QuizAttemptRepository(db)
 
@@ -39,7 +42,7 @@ class QuizSessionService:
         answered_questions = await self.attempt_repo.get_answer_count(attempt.id)
         correct_answers = await self.attempt_repo.get_correct_answer_count(attempt.id)
         wrong_answers = max(answered_questions - correct_answers, 0)
-        topic_statistic = await self.attempt_repo.get_question_topic_statistic(quiz_id,attempt.id)
+        topic_statistic = await self.attempt_repo.get_question_topic_statistic(quiz_id, attempt.id)
         attempt.score = correct_answers
         attempt.current_question = min(answered_questions + 1, max(total_questions, 1))
 
@@ -51,7 +54,7 @@ class QuizSessionService:
             "correct_answers": correct_answers,
             "wrong_answers": wrong_answers,
             "score": attempt.score,
-            "topic_statistic":topic_statistic,
+            "topic_statistic": topic_statistic,
             "finished": attempt.finished,
         }
 
@@ -302,6 +305,101 @@ class QuizSessionService:
             )
 
         return formatted
+
+    async def start_single_player_quiz(self, quiz_id: int, user: User, duration_minute: int = 30):
+        # create session
+        quiz_session = await self.session_repo.create(
+            {
+                "quiz_id": quiz_id,
+                "host_id": user.id,
+                "join_code": await self._generate_unique_join_code(),
+                "status": "waiting",
+                "duration_minutes": duration_minute,
+            }
+        )
+        # create participant
+        await self.participant_repo.create(
+            {
+                "session_id": quiz_session.id,
+                "nickname": user.username,
+                "user_id": user.id,
+                "is_host": True,
+            }
+        )
+        # start session
+        await self.session_repo.start_session(quiz_session)
+
+        await self.db.commit()
+        await self.db.refresh(quiz_session)
+        questions = await self.question_repo.list_with_details(quiz_id, user.id)
+        return {
+            "session_id": quiz_session.id,
+            "quiz_id": quiz_id,
+            "questions_count": len(questions),
+            "status": quiz_session.status,
+            "started_at": quiz_session.started_at,
+            "finished_at": quiz_session.finished_at,
+            "questions": questions,
+        }
+
+    async def get_single_player_quiz_info(self, session_id: int, user_id: int):
+        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id)
+        if not quiz_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        questions = await self.question_repo.list_with_details(quiz_session.quiz_id, user_id)
+        return {
+            "session_id": quiz_session.id,
+            "quiz_id": quiz_session.quiz_id,
+            "questions_count": len(questions),
+            "status": quiz_session.status,
+            "started_at": quiz_session.started_at,
+            "finished_at": quiz_session.finished_at,
+            "questions": questions,
+        }
+
+    async def finish_single_player_quiz(self, session_id: int, user_id: int, answers: list[SubmitAnswerRequest]):
+        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id)
+        if not quiz_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        participant = await self.participant_repo.get_by_session_user(session_id, user_id)
+        if not participant:
+            raise HTTPException(status_code=403, detail="User is not a participant of this session")
+
+        attempt = await self.attempt_repo.get_or_create(
+            session_id=session_id,
+            participant_id=participant.id,
+
+        )
+
+        for answer in answers:
+            selected_option = await self.attempt_repo.get_option_for_question(
+                question_id=answer.question_id,
+                option_label=answer.selected_option,
+            )
+            if selected_option:
+                await self.attempt_repo.upsert_answer(
+                    attempt_id=attempt.id,
+                    question_id=answer.question_id,
+                    selected_option=answer.selected_option,
+                    is_correct=selected_option.is_correct,
+                )
+
+        attempt.finished = True
+        quiz_session.status = "finished"
+        quiz_session.finished_at = datetime.now()
+        result = await self._build_attempt_result(
+            session_id=session_id,
+            quiz_id=quiz_session.quiz_id,
+            attempt=attempt,
+        )
+        result["finished"] = True
+        # spend_time return in seconds
+        result["spend_time"] = int((quiz_session.finished_at - quiz_session.started_at).total_seconds())
+
+        await self.db.commit()
+        return result
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:

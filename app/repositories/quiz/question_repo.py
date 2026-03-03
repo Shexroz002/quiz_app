@@ -21,3 +21,16 @@ class QuestionRepository(BaseRepository):
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_with_details(self, quiz_id: int, user_id: int):
+
+        stmt = (
+            select(Question)
+            .where(Question.quiz_id == quiz_id, Question.quiz.has(user_id=user_id))
+            .options(
+                selectinload(Question.options),
+                selectinload(Question.images),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().all()

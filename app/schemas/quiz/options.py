@@ -5,3 +5,7 @@ class OptionBase(BaseModel):
     text: str
     is_correct: bool
 
+
+class OptionWithoutCorrect(BaseModel):
+    label: str
+    text: str
