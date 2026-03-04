@@ -9,6 +9,7 @@ from app.schemas.quiz.question import QuestionDetail, QuestionDetailWithoutCorre
 class QuizSessionCreate(BaseModel):
     quiz_id: int
     duration_minutes: int
+    max_participants: int
 
 
 class JoinSessionRequest(BaseModel):
@@ -18,12 +19,13 @@ class JoinSessionRequest(BaseModel):
 class QuizSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    session_id: int
     quiz_id: int
     host_id: int
     join_code: str
     status: str
     duration_minutes: int
+    questions_count: int
     started_at: datetime | None
     finished_at: datetime | None
 

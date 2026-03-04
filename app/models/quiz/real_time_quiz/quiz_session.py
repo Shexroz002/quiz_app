@@ -21,6 +21,7 @@ class QuizSession(BaseModel):
         String,
         default="waiting"
     )
+    max_participants: Mapped[int] = mapped_column(Integer,nullable=True)
     # waiting | running | finished
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

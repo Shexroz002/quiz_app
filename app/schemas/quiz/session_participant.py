@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class SessionParticipantCreate(BaseModel):
@@ -15,3 +15,12 @@ class SessionParticipantList(BaseModel):
     is_host: bool
     first_name: str | None
     last_name: str | None
+
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str):
+        BASE_URL = 'http://localhost:8000'
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"

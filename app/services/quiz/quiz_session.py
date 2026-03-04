@@ -14,6 +14,7 @@ from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest
 from app.schemas.quiz.quiz_session import QuizSessionCreate
+from app.websocket import session_ws_manager
 
 
 def generate_join_code() -> str:
@@ -86,7 +87,18 @@ class QuizSessionService:
 
         await self.db.commit()
         await self.db.refresh(quiz_session)
-        return quiz_session
+        result = {
+            "session_id": quiz_session.id,
+            "quiz_id": quiz_session.quiz_id,
+            "host_id": quiz_session.host_id,
+            "join_code": quiz_session.join_code,
+            "status": quiz_session.status,
+            "duration_minutes": quiz_session.duration_minutes,
+            "questions_count": 30, # TODO: get real question count for quiz
+            "started_at": quiz_session.started_at,
+            "finished_at": quiz_session.finished_at,
+        }
+        return  result
 
     async def add_participant(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
@@ -144,7 +156,16 @@ class QuizSessionService:
 
         await self.db.commit()
         await self.db.refresh(quiz_session)
-
+        await session_ws_manager.broadcast(
+            session_id=session_id,
+            event="session_started",
+            payload={
+               "session_id": quiz_session.id,
+               "quiz_id": quiz_session.quiz_id,
+               "started_at": quiz_session.started_at.isoformat(),
+               "finished_at": quiz_session.finished_at.isoformat(),
+            },
+        )
         return {
             "id": quiz_session.id,
             "status": quiz_session.status,
@@ -342,22 +363,26 @@ class QuizSessionService:
             "questions": questions,
         }
 
-    async def get_single_player_quiz_info(self, session_id: int, user_id: int):
-        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id)
+    async def get_single_player_quiz_info(self, session_id: int, user_id: int,is_question=True,status="running"):
+        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id,status=status)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
         questions = await self.question_repo.list_with_details(quiz_session.quiz_id, user_id)
-        return {
+        result = {
             "session_id": quiz_session.id,
             "quiz_id": quiz_session.quiz_id,
+            "duration_minutes": quiz_session.duration_minutes,
+            "join_code": quiz_session.join_code,
+            "host_id": quiz_session.host_id,
             "questions_count": len(questions),
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
             "finished_at": quiz_session.finished_at,
-            "questions": questions,
         }
-
+        if is_question:
+            result["questions"] = questions
+        return result
     async def finish_single_player_quiz(self, session_id: int, user_id: int, answers: list[SubmitAnswerRequest]):
         quiz_session = await self.session_repo.get_single_player_session(session_id, user_id)
         if not quiz_session:

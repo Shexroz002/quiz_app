@@ -44,11 +44,11 @@ class QuizSessionRepository:
         await self.db.flush()
         return quiz_session
 
-    async def get_single_player_session(self, session_id: int, host_id: int) -> QuizSession | None:
+    async def get_single_player_session(self, session_id: int, host_id: int,status="running") -> QuizSession | None:
         stmt = select(QuizSession).where(
             QuizSession.id == session_id,
             QuizSession.host_id == host_id,
-            QuizSession.status == "running",
+            QuizSession.status == status
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()

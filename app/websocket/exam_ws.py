@@ -13,9 +13,6 @@ from app.websocket.utils.auth_ws import authenticate_websocket
 quiz_session_ws_router = APIRouter(tags=["Quiz Session WebSocket"])
 
 
-
-
-
 async def _is_authorized_for_session(user_id: int, session_id: int) -> bool:
     async with AsyncSessionLocal() as db:
         session_repo = QuizSessionRepository(db)
@@ -30,7 +27,9 @@ async def _is_authorized_for_session(user_id: int, session_id: int) -> bool:
 
         return await participant_repo.is_participant(session_id=session_id, user_id=user_id)
 
+
 # WebSocket endpoint for quiz session participation and real-time updates
+
 @quiz_session_ws_router.websocket("/ws/quiz/sessions/{session_id}")
 async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
     user = await authenticate_websocket(websocket)
@@ -84,8 +83,11 @@ async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
         await session_ws_manager.broadcast(
             session_id=session_id,
             event="participant_disconnected",
-            payload={"user_id": user.id, "participants_online": session_ws_manager.count(session_id)},
+            payload={
+                "user_id": user.id,
+                "username": user.username,
+                "avatar_url": user.profile_image if user.profile_image else None,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "participants_online": session_ws_manager.count(session_id)},
         )
-
-
-
