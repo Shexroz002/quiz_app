@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
-
+from typing import Any, List
+from sqlalchemy import select, func, cast, literal, JSON
+from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import QuizSession
+from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage
 
 
 class QuizSessionRepository:
@@ -51,8 +53,133 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    # get only questions list for quiz session
-    """
-    return list of questions for quiz session. questions must include question text,image,table, user answer options and correct answer
-    """
+    async def get_session_questions_with_answers(
+            self,
+            session_id: int,
+            host_id: int,
+    ) -> List[dict[str, Any]]:
+        """
+        Returns rows like:
+        [
+          {
+            "id": ...,
+            "quiz_id": ...,
+            "difficulty": ...,
+            "question_text": ...,
+            "subject": ...,
+            "table_markdown": ...,
+            "topic": ...,
+            "options": [ {id,label,text,is_correct}, ... ],
+            "user_select_option": ...,
+            "user_select_option_is_correct": ...
+          },
+          ...
+        ]
+        """
 
+        # ---------------------------
+        # 1) participant id subquery (LIMIT 1)
+        # ---------------------------
+        sp_id_sq = (
+            select(SessionParticipant.id)
+            .where(SessionParticipant.session_id == QuizSession.id)
+            .order_by(SessionParticipant.id.asc())
+            .limit(1)
+            .correlate(QuizSession)
+            .scalar_subquery()
+        )
+
+        # ---------------------------
+        # 2) attempt id subquery (latest attempt for that participant in session)
+        # ---------------------------
+        qa_id_sq = (
+            select(QuizAttempt.id)
+            .where(
+                QuizAttempt.session_id == QuizSession.id,
+                QuizAttempt.participant_id == sp_id_sq,
+            )
+            .order_by(QuizAttempt.id.desc())
+            .limit(1)
+            .correlate(QuizSession)
+            .scalar_subquery()
+        )
+
+        # ---------------------------
+        # 3) options json_agg per question
+        #    IMPORTANT: ORDER BY must be inside json_agg using aggregate_order_by
+        # ---------------------------
+        options_sq = (
+            select(
+                func.coalesce(
+                    func.json_agg(
+                        aggregate_order_by(
+                            func.json_build_object(
+                                "id", Option.id,
+                                "label", Option.label,
+                                "text", Option.text,
+                                "is_correct", Option.is_correct,
+                            ),
+                            Option.id.asc(),
+                        )
+                    ),
+                    cast(literal("[]"), JSON),  # fallback = []
+                )
+            )
+            .where(Option.question_id == Question.id)
+            .correlate(Question)
+            .scalar_subquery()
+        )
+        # --- 4) images json per question ---
+        images_sq = (
+            select(
+                func.coalesce(
+                    func.json_agg(
+                        aggregate_order_by(
+                            func.json_build_object(
+                                "id", QuestionImage.id,
+                                "image_url", QuestionImage.image_url,
+                            ),
+                            QuestionImage.id.asc(),
+                        )
+                    ),
+                    cast(literal("[]"), JSON),
+                )
+            )
+            .where(QuestionImage.question_id == Question.id)
+            .correlate(Question)
+            .scalar_subquery()
+        )
+
+        # ---------------------------
+        # 4) main query
+        # ---------------------------
+        stmt = (
+            select(
+                Question.id.label("id"),
+                Question.quiz_id.label("question_id"),
+                Question.difficulty.label("difficulty"),
+                Question.question_text.label("question_text"),
+                Question.subject.label("subject"),
+                Question.table_markdown.label("table_markdown"),
+                Question.topic.label("topic"),
+                images_sq.label("images"),
+                options_sq.label("options"),
+                AttemptAnswer.selected_option.label("user_select_option"),
+                AttemptAnswer.is_correct.label("user_select_option_is_correct"),
+            )
+            .select_from(QuizSession)
+            .join(Question, Question.quiz_id == QuizSession.quiz_id)
+            .outerjoin(
+                AttemptAnswer,
+                (AttemptAnswer.attempt_id == qa_id_sq)
+                & (AttemptAnswer.question_id == Question.id),
+            )
+            .where(
+                QuizSession.id == session_id,
+                QuizSession.host_id == host_id,
+            )
+            .order_by(Question.id.asc())
+        )
+
+        res = await self.db.execute(stmt)
+        return res.mappings().all()

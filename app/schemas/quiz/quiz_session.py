@@ -1,8 +1,9 @@
 from datetime import datetime
+from typing import Optional, List
 
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.quiz.question import QuestionDetail, QuestionDetailWithoutCorrect
+from app.schemas.quiz.question import QuestionDetail, QuestionDetailWithoutCorrect, QuestionImageBase
 
 
 class QuizSessionCreate(BaseModel):
@@ -51,3 +52,24 @@ class StartSessionSinglePlayerResponse(StartSessionSinglePlayerBaseResponse):
     started_at: datetime | None
     finished_at: datetime | None
     questions: list[QuestionDetailWithoutCorrect]
+
+class OptionSchema(BaseModel):
+    id: int
+    label: str
+    text: str
+    is_correct: bool
+
+class QuestionErrorAnalyticSessionResponse(BaseModel):
+    id: int
+    question_id: int
+    difficulty: Optional[str] = None
+    question_text: str
+    subject: Optional[str] = None
+    table_markdown: Optional[str] = None
+    images : List[QuestionImageBase]
+    topic: Optional[str] = None
+
+    options: List[OptionSchema] = []
+
+    user_select_option: Optional[str] = None
+    user_select_option_is_correct: Optional[bool] = None

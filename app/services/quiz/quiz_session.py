@@ -400,7 +400,11 @@ class QuizSessionService:
 
         await self.db.commit()
         return result
-
+    async def single_player_error_analysis(self, session_id: int, user_id: int):
+        quiz_session = await self.session_repo.get_session_questions_with_answers(session_id, user_id)
+        if not quiz_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return quiz_session
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:
     return QuizSessionService(db)

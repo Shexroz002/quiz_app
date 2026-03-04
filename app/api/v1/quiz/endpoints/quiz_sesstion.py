@@ -16,6 +16,7 @@ from app.schemas.quiz.quiz_session import (
     QuizSessionCreate,
     QuizSessionResponse,
     StartSessionResponse, StartSessionSinglePlayerResponse, StartSessionSinglePlayerBaseResponse,
+    QuestionErrorAnalyticSessionResponse,
 )
 from app.schemas.quiz.session_participant import SessionParticipantList
 from app.services.quiz.quiz_session import get_quiz_session_service
@@ -132,3 +133,11 @@ async def finish_single_player_quiz(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.finish_single_player_quiz(session_id, current_user.id, answers)
+
+@quiz_session_router.get("/{session_id}/single-player-error-analysis/",response_model=List[QuestionErrorAnalyticSessionResponse])
+async def single_player_error_analysis(
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.single_player_error_analysis(session_id, current_user.id)
