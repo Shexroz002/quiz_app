@@ -1,6 +1,6 @@
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.params import Body
 
 from app.api.v1.auth.dependencies.current_user import get_current_user
@@ -16,7 +16,7 @@ from app.schemas.quiz.quiz_session import (
     QuizSessionCreate,
     QuizSessionResponse,
     StartSessionResponse, StartSessionSinglePlayerResponse, StartSessionSinglePlayerBaseResponse,
-    QuestionErrorAnalyticSessionResponse,
+    QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow
 )
 from app.schemas.quiz.session_participant import SessionParticipantList
 from app.services.quiz.quiz_session import get_quiz_session_service
@@ -42,13 +42,15 @@ async def quiz_session_join(
 ):
     return await quiz_session.add_participant(payload.session_code, current_user)
 
+
 @quiz_session_router.get("/multiplayer/{session_id}/info/", response_model=QuizSessionResponse)
 async def get_multiplayer_player_quiz_info(
         session_id: int,
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.get_single_player_quiz_info(session_id, current_user.id,is_question=False,status="waiting")
+    return await quiz_session.get_single_player_quiz_info(session_id, current_user.id, is_question=False,
+                                                          status="waiting")
 
 
 @quiz_session_router.get("/multiplayer/{session_id}/participants/", response_model=List[SessionParticipantList])
@@ -67,7 +69,6 @@ async def start_quiz_session(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.start_session(session_id, current_user)
-
 
 
 @quiz_session_router.post("/multiplayer/{session_id}/answer/", response_model=SubmitAnswerResponse)
@@ -123,7 +124,7 @@ async def get_single_player_quiz_info(
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.get_single_player_quiz_info(session_id, current_user.id,status="running")
+    return await quiz_session.get_single_player_quiz_info(session_id, current_user.id, status="running")
 
 
 @quiz_session_router.post("/{session_id}/finish-single-player/", response_model=FinishQuizResponse)
@@ -153,3 +154,17 @@ async def single_player_error_analysis(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.single_player_error_analysis(session_id, current_user.id)
+
+
+# fetch quiz session hisotry for single player
+@quiz_session_router.get("/me/history/", response_model=List[SessionLeaderboardRow])
+async def single_player_quiz_history(
+        search: Optional[str] = Query(
+            default=None,
+            description="Search by quiz title or subject",
+            min_length=1,
+        ),
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.personal_quiz_session_history(current_user.id, search)

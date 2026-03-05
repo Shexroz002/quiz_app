@@ -45,7 +45,8 @@ class QuizSessionService:
         wrong_answers = max(answered_questions - correct_answers, 0)
         topic_statistic = await self.attempt_repo.get_question_topic_statistic(quiz_id, attempt.id)
         attempt.score = correct_answers
-        attempt.current_question = min(answered_questions + 1, max(total_questions, 1))
+        attempt.wrong_answers = wrong_answers
+        attempt.total_questions = total_questions
 
         return {
             "session_id": session_id,
@@ -94,11 +95,11 @@ class QuizSessionService:
             "join_code": quiz_session.join_code,
             "status": quiz_session.status,
             "duration_minutes": quiz_session.duration_minutes,
-            "questions_count": 30, # TODO: get real question count for quiz
+            "questions_count": 30,  # TODO: get real question count for quiz
             "started_at": quiz_session.started_at,
             "finished_at": quiz_session.finished_at,
         }
-        return  result
+        return result
 
     async def add_participant(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
@@ -160,10 +161,10 @@ class QuizSessionService:
             session_id=session_id,
             event="session_started",
             payload={
-               "session_id": quiz_session.id,
-               "quiz_id": quiz_session.quiz_id,
-               "started_at": quiz_session.started_at.isoformat(),
-               "finished_at": quiz_session.finished_at.isoformat(),
+                "session_id": quiz_session.id,
+                "quiz_id": quiz_session.quiz_id,
+                "started_at": quiz_session.started_at.isoformat(),
+                "finished_at": quiz_session.finished_at.isoformat(),
             },
         )
         return {
@@ -363,8 +364,8 @@ class QuizSessionService:
             "questions": questions,
         }
 
-    async def get_single_player_quiz_info(self, session_id: int, user_id: int,is_question=True,status="running"):
-        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id,status=status)
+    async def get_single_player_quiz_info(self, session_id: int, user_id: int, is_question=True, status="running"):
+        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id, status=status)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -383,6 +384,7 @@ class QuizSessionService:
         if is_question:
             result["questions"] = questions
         return result
+
     async def finish_single_player_quiz(self, session_id: int, user_id: int, answers: list[SubmitAnswerRequest]):
         quiz_session = await self.session_repo.get_single_player_session(session_id, user_id)
         if not quiz_session:
@@ -412,6 +414,7 @@ class QuizSessionService:
                 )
 
         attempt.finished = True
+        attempt.finished_at = datetime.now()
         quiz_session.status = "finished"
         quiz_session.finished_at = datetime.now()
         result = await self._build_attempt_result(
@@ -425,11 +428,17 @@ class QuizSessionService:
 
         await self.db.commit()
         return result
+
     async def single_player_error_analysis(self, session_id: int, user_id: int):
         quiz_session = await self.session_repo.get_session_questions_with_answers(session_id, user_id)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
         return quiz_session
+
+    async def personal_quiz_session_history(self, user_id: int,search:str):
+        session_history = await self.session_repo.get_personal_quiz_session_history(user_id,search)
+        return session_history
+
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:
     return QuizSessionService(db)

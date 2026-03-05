@@ -75,3 +75,22 @@ class QuestionErrorAnalyticSessionResponse(BaseModel):
 
     user_select_option: Optional[str] = None
     user_select_option_is_correct: Optional[bool] = None
+
+class SessionLeaderboardRow(BaseModel):
+    session_id: int
+    user_id: int
+
+    title: str | None = None
+    subject: str | None = None
+
+    rank: int
+    participant_count: int
+
+    correct_answers: int | None = None
+    wrong_answers: int | None = None
+    total_questions: int | None = None
+
+    finished_at: datetime | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

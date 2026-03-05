@@ -1,11 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, List
-from sqlalchemy import select, func, cast, literal, JSON
+from sqlalchemy import select, func, cast, literal, JSON,and_
 from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage
+from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage,Quiz
 
 
 class QuizSessionRepository:
@@ -183,3 +183,55 @@ class QuizSessionRepository:
 
         res = await self.db.execute(stmt)
         return res.mappings().all()
+
+    async def get_personal_quiz_session_history(self, user_id: int,search: str) -> List[QuizSession]:
+        base_cte = (
+            select(
+                QuizSession.id.label("session_id"),
+                SessionParticipant.user_id.label("user_id"),
+                Quiz.title.label("title"),
+                Quiz.subject.label("subject"),
+                func.dense_rank()
+                .over(
+                    partition_by=QuizSession.id,
+                    order_by=QuizAttempt.score.desc(),
+                )
+                .label("rank"),
+                func.count()
+                .over(partition_by=QuizSession.id)
+                .label("participant_count"),
+                QuizAttempt.score.label("correct_answers"),
+                QuizAttempt.wrong_answers.label("wrong_answers"),
+                QuizAttempt.total_questions.label("total_questions"),
+                QuizAttempt.finished_at.label("finished_at"),
+                QuizSession.created_at.label("created_at"),
+            )
+            .select_from(QuizSession)
+            .outerjoin(Quiz, Quiz.id == QuizSession.quiz_id)
+            .join(SessionParticipant, SessionParticipant.session_id == QuizSession.id)
+            .outerjoin(
+                QuizAttempt,
+                and_(
+                    QuizAttempt.session_id == QuizSession.id,
+                    QuizAttempt.participant_id == SessionParticipant.id,
+                ),
+            )
+            .cte("base")
+        )
+        if search:
+            stmt = (
+                select(base_cte)
+                .where(
+                    base_cte.c.user_id == user_id,
+                    base_cte.c.title.ilike(f"%{search}%"),
+                )
+                .order_by(base_cte.c.session_id.desc())
+            )
+        else:
+            stmt = (
+                select(base_cte)
+                .where(base_cte.c.user_id == user_id)
+                .order_by(base_cte.c.session_id.desc())
+            )
+        result = await self.db.execute(stmt)
+        return result.mappings().all()

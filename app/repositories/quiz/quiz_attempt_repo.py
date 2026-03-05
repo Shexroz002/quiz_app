@@ -33,7 +33,6 @@ class QuizAttemptRepository:
             session_id=session_id,
             participant_id=participant_id,
             score=0,
-            current_question=1,
             finished=False,
         )
         self.db.add(attempt)
