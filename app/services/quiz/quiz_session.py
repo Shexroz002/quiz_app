@@ -439,6 +439,10 @@ class QuizSessionService:
         session_history = await self.session_repo.get_personal_quiz_session_history(user_id,search)
         return session_history
 
+    async def session_participant_rank_list(self, session_id: int,user_id: int):
+        rank_list = await self.session_repo.get_session_participant_rank_list(session_id,user_id)
+        return rank_list
+
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:
     return QuizSessionService(db)

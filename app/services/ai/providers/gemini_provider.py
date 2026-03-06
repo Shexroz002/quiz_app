@@ -52,7 +52,6 @@ class GeminiProvider(AIProvider):
             if progress:
                 await progress(15, "PDF AI serverga yuklanmoqda")
 
-
             with open(pdf_path, "rb") as f:
                 uploaded_file = self.client.files.upload(
                     file=f,

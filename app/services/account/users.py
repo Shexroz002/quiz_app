@@ -56,6 +56,9 @@ class UserService(BaseService):
     async def get_by_username(self, username: str):
         return await self.repo.get_by_username(username)
 
+    async def search_users_for_contact(self,current_user_id:int, search: str=None):
+        return await self.repo.users_with_contact_status(current_user_id=current_user_id, search=search)
+
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)

@@ -1,6 +1,8 @@
+from datetime import datetime
+from decimal import Decimal
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class SubmitAnswerRequest(BaseModel):
@@ -35,16 +37,20 @@ class FinishQuizResponse(BaseModel):
     topic_statistic:List[TopicStatisticSchema]
 
 
-class ParticipantResultResponse(BaseModel):
-    participant_id: int
+class ParticipantAttemptRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: int
-    nickname: str
-    is_host: bool
-    first_name: str | None
-    last_name: str | None
-    total_questions: int
-    answered_questions: int
-    correct_answers: int
-    wrong_answers: int
-    score: int
-    finished: bool
+
+    first_name: str | None = None
+    last_name: str | None = None
+    profile_image: str | None = None
+
+    score: int | None = None
+    wrong_answers: int | None = None
+    total_questions: int | None = None
+
+    finished: bool | None = None
+
+    spend_time_seconds: Decimal | float | None = None
+    finished_at: datetime | None = None

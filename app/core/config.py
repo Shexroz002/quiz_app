@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "media/quiz/file"
     MAX_PDF_SIZE: int = 5 * 1024 * 1024
 
-    GEMINI_API_KEY: str = "AIzaSyBpNAKygiXLjejQXSsPBKPnfDt0O5SiZmw"
+    GEMINI_API_KEY: str = "AIzaSyBdqU3M9bEz4TmFVumQiMDs-yldNM80M3U"
     GEMINI_MODEL: str = "gemini-3-flash-preview"
 
     OPENAI_API_KEY: str | None = None

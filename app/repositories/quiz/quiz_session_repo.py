@@ -1,11 +1,10 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any, List
-from sqlalchemy import select, func, cast, literal, JSON,and_
-from sqlalchemy.dialects.postgresql import JSONB, aggregate_order_by
+from sqlalchemy import func, cast, literal, JSON,and_
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage,Quiz
+from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage,Quiz,User
 
 
 class QuizSessionRepository:
@@ -57,29 +56,8 @@ class QuizSessionRepository:
             self,
             session_id: int,
             host_id: int,
-    ) -> List[dict[str, Any]]:
-        """
-        Returns rows like:
-        [
-          {
-            "id": ...,
-            "quiz_id": ...,
-            "difficulty": ...,
-            "question_text": ...,
-            "subject": ...,
-            "table_markdown": ...,
-            "topic": ...,
-            "options": [ {id,label,text,is_correct}, ... ],
-            "user_select_option": ...,
-            "user_select_option_is_correct": ...
-          },
-          ...
-        ]
-        """
+    ):
 
-        # ---------------------------
-        # 1) participant id subquery (LIMIT 1)
-        # ---------------------------
         sp_id_sq = (
             select(SessionParticipant.id)
             .where(SessionParticipant.session_id == QuizSession.id)
@@ -89,9 +67,6 @@ class QuizSessionRepository:
             .scalar_subquery()
         )
 
-        # ---------------------------
-        # 2) attempt id subquery (latest attempt for that participant in session)
-        # ---------------------------
         qa_id_sq = (
             select(QuizAttempt.id)
             .where(
@@ -104,10 +79,6 @@ class QuizSessionRepository:
             .scalar_subquery()
         )
 
-        # ---------------------------
-        # 3) options json_agg per question
-        #    IMPORTANT: ORDER BY must be inside json_agg using aggregate_order_by
-        # ---------------------------
         options_sq = (
             select(
                 func.coalesce(
@@ -129,7 +100,6 @@ class QuizSessionRepository:
             .correlate(Question)
             .scalar_subquery()
         )
-        # --- 4) images json per question ---
         images_sq = (
             select(
                 func.coalesce(
@@ -150,9 +120,6 @@ class QuizSessionRepository:
             .scalar_subquery()
         )
 
-        # ---------------------------
-        # 4) main query
-        # ---------------------------
         stmt = (
             select(
                 Question.id.label("id"),
@@ -184,7 +151,7 @@ class QuizSessionRepository:
         res = await self.db.execute(stmt)
         return res.mappings().all()
 
-    async def get_personal_quiz_session_history(self, user_id: int,search: str) -> List[QuizSession]:
+    async def get_personal_quiz_session_history(self, user_id: int,search: str):
         base_cte = (
             select(
                 QuizSession.id.label("session_id"),
@@ -233,5 +200,37 @@ class QuizSessionRepository:
                 .where(base_cte.c.user_id == user_id)
                 .order_by(base_cte.c.session_id.desc())
             )
+        result = await self.db.execute(stmt)
+        return result.mappings().all()
+
+    async def get_session_participant_rank_list(self, session_id: int,user_id:int):
+        stmt = (
+            select(
+                SessionParticipant.user_id.label("user_id"),
+                User.first_name.label("first_name"),
+                User.last_name.label("last_name"),
+                User.profile_image.label("profile_image"),
+                QuizAttempt.score.label("score"),
+                QuizAttempt.wrong_answers.label("wrong_answers"),
+                QuizAttempt.total_questions.label("total_questions"),
+                func.extract(
+                    "epoch",
+                    QuizAttempt.finished_at - QuizSession.started_at,
+                ).label("spend_time_seconds")
+            )
+            .select_from(QuizSession)
+            .join(SessionParticipant, SessionParticipant.session_id == QuizSession.id)
+            .join(User, User.id == SessionParticipant.user_id)
+            .outerjoin(
+                QuizAttempt,
+                and_(
+                    QuizAttempt.session_id == QuizSession.id,
+                    QuizAttempt.participant_id == SessionParticipant.id,
+                ),
+            )
+            .where(QuizSession.id == session_id)
+            .order_by(QuizAttempt.score.desc(),  QuizAttempt.finished_at.asc())
+        )
+
         result = await self.db.execute(stmt)
         return result.mappings().all()

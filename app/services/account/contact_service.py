@@ -13,7 +13,7 @@ class ContactService:
         self.repo = ContactRepository(db)
         self.user_repo = UserRepository(db)
 
-    async def create_contact(self, friend_id: int, contact_user_id: int, name: str = None):
+    async def create_contact(self, contact_user_id: int, friend_id: int, name: str = None):
         if friend_id == contact_user_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot add yourself as a contact.")
 
@@ -29,17 +29,17 @@ class ContactService:
                 name = f"{friend.first_name} {friend.last_name}"
             else:
                 name = friend.username
-        data = {
-            "friend_id": friend_id,
-            "user_id": contact_user_id,
-            "name": name
-        }
-        data = await self.repo.create(data)
+        data = await self.repo.create_contact(user_id=contact_user_id, friend_id=friend_id, name=name)
         await self.db.commit()
         return data
 
     async def contact_list(self, contact_user_id: int):
         return await self.repo.contact_list(contact_user_id)
+
+
+    async def contact_suggestions(self, contact_user_id: int):
+        return await self.repo.contact_suggestions(contact_user_id)
+
 
 
 def get_contact_service(db: AsyncSession = Depends(get_db)) -> ContactService:

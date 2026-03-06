@@ -7,7 +7,6 @@ from app.api.v1.auth.dependencies.current_user import get_current_user
 from app.models import User
 from app.schemas.quiz.quiz_attempt import (
     FinishQuizResponse,
-    ParticipantResultResponse,
     SubmitAnswerRequest,
     SubmitAnswerResponse, AnswerItem,
 )
@@ -16,7 +15,7 @@ from app.schemas.quiz.quiz_session import (
     QuizSessionCreate,
     QuizSessionResponse,
     StartSessionResponse, StartSessionSinglePlayerResponse, StartSessionSinglePlayerBaseResponse,
-    QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow
+    QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow,ParticipantResultResponse
 )
 from app.schemas.quiz.session_participant import SessionParticipantList
 from app.services.quiz.quiz_session import get_quiz_session_service
@@ -168,3 +167,13 @@ async def single_player_quiz_history(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.personal_quiz_session_history(current_user.id, search)
+
+
+# participant ranking list for quiz session
+@quiz_session_router.get("/{session_id}/leaderboard/", response_model=List[ParticipantResultResponse])
+async def quiz_session_leaderboard(
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.session_participant_rank_list(session_id, current_user.id)

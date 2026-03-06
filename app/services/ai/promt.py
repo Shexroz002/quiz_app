@@ -41,6 +41,8 @@ CONTENT RULES:
 
 9. The `meta` field can include any additional information you find relevant (e.g., difficulty, topic) and must be in uzbek language.
 10. Before sending the answer, you MUST internally validate that the JSON is syntactically correct.
+11. detect subject automatically (fizika, matematika, kimyo, bialogiya, etc.) and set it in the "subject" field.
+12. write description of the quiz in the "description" field in uzbek language.
 
 JSON ESCAPING RULES (STRICT):
 - Every backslash in LaTeX MUST be double escaped (\\).
@@ -103,6 +105,8 @@ QUIZ_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "quiz_title": {"type": "STRING"},
+        "subject": {"type": "STRING"},
+        "description": {"type": "STRING"},
         "questions": {
             "type": "ARRAY",
             "items": {

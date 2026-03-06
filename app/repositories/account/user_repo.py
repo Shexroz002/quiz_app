@@ -1,8 +1,7 @@
-# app/repository/user_repository.py
-
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, case, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import Contact
 from app.models.account.user import User
 from app.repositories.base.base_repository import BaseRepository
 
@@ -31,7 +30,60 @@ class UserRepository(BaseRepository[User]):
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_id(self, user_id: int)-> User | None:
+    async def get_by_id(self, user_id: int) -> User | None:
         stmt = select(User).where(User.id == user_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def users_with_contact_status(
+            self,
+            current_user_id: int,
+            search: str | None = None
+    ):
+        stmt = (
+            select(
+                User.id,
+                User.username,
+                User.first_name,
+                User.last_name,
+                User.profile_image,
+                case(
+                    (Contact.id != None, True),
+                    else_=False
+                ).label("contact_available")
+            )
+            .outerjoin(
+                Contact,
+                (Contact.friend_id == User.id) &
+                (Contact.user_id == current_user_id)
+            )
+            .where(User.id != current_user_id)
+        )
+
+        if search:
+            search_term = f"%{search}%"
+
+            stmt = stmt.where(
+                or_(
+                    User.username.ilike(search_term),
+                    User.first_name.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                )
+            )
+        else:
+            stmt = stmt.limit(10)
+
+        result = await self.db.execute(stmt)
+
+        return [
+            {
+                "id": r.id,
+                "username": r.username,
+                "first_name": r.first_name,
+                "last_name": r.last_name,
+                "profile_image": r.profile_image,
+                "contact_available": r.contact_available
+            }
+            for r in result
+        ]
+

@@ -13,5 +13,5 @@ class ContactRequest(BaseModel):
 
 class ContactResponse(BaseModel):
     id: int
-    name: str
+    # name: str
     friend:UserShortInfoSchema

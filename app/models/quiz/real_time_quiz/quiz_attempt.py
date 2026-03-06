@@ -25,7 +25,7 @@ class QuizAttempt(BaseModel):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=True
-    )  # Set when the participant finishes the quiz
+    )
 
     answers = relationship(
         "AttemptAnswer",

@@ -1,6 +1,8 @@
 from typing import Annotated
 
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_serializer
+
+from app.schemas.quiz.question import BASE_URL
 
 
 class UserListSchema(BaseModel):
@@ -8,7 +10,18 @@ class UserListSchema(BaseModel):
     username: str
     first_name: str
     last_name: str
+    profile_image: str | None = None
 
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str):
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
+
+class UserContactListSchema(UserListSchema):
+    contact_available: bool
 
 class UpdateUserSchema(BaseModel):
     username: str | None = Field(
@@ -41,3 +54,11 @@ class UserShortInfoSchema(BaseModel):
     profile_image: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str):
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
