@@ -2,58 +2,41 @@ from __future__ import annotations
 
 from json import JSONDecodeError
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from starlette.websockets import WebSocketState
+
 from app.websocket.notification_manager import notification_manager
 from app.websocket.utils import authenticate_websocket
 
 notification_ws_router = APIRouter(tags=["Notification WebSocket"])
 
-
-@notification_ws_router.websocket("/ws/notifications")
+"""
+WebSocket endpoint for user notifications.
+ ws://localhost:8000/ws/notifications/{user_id}?token=abc123
+"""
+@notification_ws_router.websocket("/ws/notifications/{user_id}")
 async def notification_websocket(websocket: WebSocket) -> None:
-    """
-    WebSocket endpoint for user notifications.
-    Connect with: ws://localhost:8000/ws/notifications?token=<jwt_token>
-    """
     user = await authenticate_websocket(websocket)
-    if not user:
+    if user is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        path_user_id = int(websocket.path_params["user_id"])
+    except (KeyError, ValueError, TypeError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    if user.id != path_user_id:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     await notification_manager.connect(websocket, user.id)
 
-    # Send connection success message
-    await websocket.send_json({
-        "type": "connection_established",
-        "data": {
-            "user_id": user.id,
-            "message": "Connected to notification service",
-        }
-    })
-
     try:
         while True:
-            try:
-                message = await websocket.receive_json()
-            except JSONDecodeError:
-                await websocket.send_json(
-                    {"type": "error", "data": {"detail": "Message must be valid JSON."}}
-                )
-                continue
-
-            event = message.get("event")
-
-            if event == "ping":
-                await websocket.send_json({"type": "pong", "data": {}})
-            else:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "data": {"detail": "Unsupported event. Use event='ping' for heartbeat."},
-                    }
-                )
-
+            await websocket.receive_text()
     except WebSocketDisconnect:
+        pass
+    finally:
         notification_manager.disconnect(websocket, user.id)
-    except Exception:
-        notification_manager.disconnect(websocket, user.id)
-        raise

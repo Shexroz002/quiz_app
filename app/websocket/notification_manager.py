@@ -39,6 +39,7 @@ class NotificationConnectionManager:
         user_id: int,
         notification_type: str,
         payload: dict[str, Any] | None = None,
+        unread_count: int | None = None,
     ) -> bool:
         """
         Send notification to a specific user.
@@ -54,6 +55,11 @@ class NotificationConnectionManager:
         for connection in self._connections.get(user_id, set()):
             try:
                 await connection.send_json(message)
+                if unread_count is not None:
+                    await connection.send_json({
+                        "type": "notification_count_update",
+                        "data": {"count": unread_count}
+                    })
                 sent = True
             except (RuntimeError, WebSocketDisconnect):
                 stale_connections.append(connection)

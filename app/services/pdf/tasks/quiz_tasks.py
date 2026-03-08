@@ -3,7 +3,6 @@ import logging
 
 from app.core.celery_app import celery_app
 from app.core.database.base import CeleryAsyncSessionLocal
-from app.core.database.session import AsyncSessionLocal
 from app.models.quiz.ai_quiz.pdf_to_quiz import PDFJob, PDFJobStatus
 from app.services.ai.promt import QUIZ_SCHEMA, QUIZ_PROMPT
 from app.services.pdf.redis_pubsub_service import update_job_status
@@ -14,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 from app.services.ai.providers.provider_factory import get_provider
 from app.services.ai.ai_service import AIQuizParser as UniversalAIQuizParser
-from app.core.config import settings
 
 
 @celery_app.task(bind=True, queue="pdf_ai_queue", max_retries=3, default_retry_delay=10)
@@ -34,7 +32,17 @@ def process_pdf_task(self, job_id: str):
                 message="Fayl tahlilga tayyorlanmoqda",
             )
 
-            async def parser_progress(progress: int, message: str):
+            async def parser_progress(progress: int, message: str, error: str | None = None):
+                if error:
+                    await update_job_status(
+                        db=db,
+                        job_id=job_id,
+                        status=PDFJobStatus.FAILED,
+                        progress=progress,
+                        message=message,
+                        error=error,
+                    )
+
                 await update_job_status(
                     db=db,
                     job_id=job_id,
@@ -43,21 +51,18 @@ def process_pdf_task(self, job_id: str):
                     message=message,
                 )
 
-            # ✅ 1) Provider tanlash (default gemini yoki DB'dan)
             provider_name = getattr(job, "ai_provider", None) or "gemini"
             provider = get_provider(provider_name, logger=logger)
 
-            # ✅ 2) Universal parser yaratish (prompt + schema)
             parser = UniversalAIQuizParser(
                 provider=provider,
-                prompt=QUIZ_PROMPT,  # yoki sizdagi prompt variable
-                schema=QUIZ_SCHEMA,  # sizning schema
+                prompt=QUIZ_PROMPT,
+                schema=QUIZ_SCHEMA,
             )
 
-            # ✅ 3) parse (progress callback bilan)
             result = await parser.parse_pdf(
                 pdf_path=job.file_path,
-                progress=parser_progress,  # universal parser "progress" deb oladi
+                progress=parser_progress,
                 timeout_sec=120,
             )
 
@@ -86,7 +91,6 @@ def process_pdf_task(self, job_id: str):
                 question_count=question_count,
             )
 
-            # cleanup
             if os.path.exists(job.file_path):
                 os.remove(job.file_path)
 

@@ -5,6 +5,7 @@ from fastapi.params import Body
 
 from app.api.v1.auth.dependencies.current_user import get_current_user
 from app.models import User
+from app.schemas.notification.notification import NotificationCreateSchema
 from app.schemas.quiz.quiz_attempt import (
     FinishQuizResponse,
     SubmitAnswerRequest,
@@ -15,15 +16,19 @@ from app.schemas.quiz.quiz_session import (
     QuizSessionCreate,
     QuizSessionResponse,
     StartSessionResponse, StartSessionSinglePlayerResponse, StartSessionSinglePlayerBaseResponse,
-    QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow,ParticipantResultResponse
+    QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow, ParticipantResultResponse
 )
 from app.schemas.quiz.session_participant import SessionParticipantList
+from app.services.notification.notification_service import get_notification_service
 from app.services.quiz.quiz_session import get_quiz_session_service
 
 quiz_session_router = APIRouter(prefix="/sessions", tags=["Quiz Sessions"])
 
+""""
+    BEGIN: Multiplayer Quiz Session Endpoints
+"""
 
-# create quiz session multiplayer user
+
 @quiz_session_router.post("/multiplayer/create/", status_code=201, response_model=QuizSessionResponse)
 async def quiz_session_create(
         quiz_session_data: QuizSessionCreate,
@@ -79,6 +84,27 @@ async def submit_answer(
 ):
     return await quiz_session.submit_answer(session_id, current_user, payload)
 
+""" Invite other players to the quiz session"""
+@quiz_session_router.post("/multiplayer/{session_id}/invite/")
+async def invite_players(
+        session_id: int,
+        recipient_id: int = Body(..., embed=True, description="ID of the user to invite"),
+        current_user: User = Depends(get_current_user),
+        notification_service=Depends(get_notification_service),
+):
+    data={
+        "recipient_id": recipient_id,
+        "sender_id": current_user.id,
+        "type": "test_invite",
+        "action_type": "test_invite",
+        "payload": {"session_id": session_id},
+        "title": "Quiz Session  taklif",
+        "message": "You have been invited to join a quiz session"
+    }
+    data_schema = NotificationCreateSchema(**data)
+    await notification_service.create_notification(data_schema)
+    return {"message": "Invitation sent successfully"}
+
 
 @quiz_session_router.post("/multiplayer/{session_id}/finish/", response_model=FinishQuizResponse)
 async def finish_quiz(
@@ -107,7 +133,11 @@ async def topic_statistic(
     return await quiz_session.topic_statistic(session_id, current_user)
 
 
-# quiz start for single player
+""" END: Multiplayer Quiz Session Endpoints """
+
+"""    BEGIN: Single Player Quiz Session Endpoints  """
+
+
 @quiz_session_router.post("/{quiz_id}/start-single-player/", response_model=StartSessionSinglePlayerBaseResponse)
 async def start_single_player_quiz(
         quiz_id: int,
@@ -145,6 +175,9 @@ async def finish_single_player_quiz(
     return await quiz_session.finish_single_player_quiz(session_id, current_user.id, answers)
 
 
+"""   END: Single Player Quiz Session Endpoints  """
+
+
 @quiz_session_router.get("/{session_id}/single-player-error-analysis/",
                          response_model=List[QuestionErrorAnalyticSessionResponse])
 async def single_player_error_analysis(
@@ -169,7 +202,6 @@ async def single_player_quiz_history(
     return await quiz_session.personal_quiz_session_history(current_user.id, search)
 
 
-# participant ranking list for quiz session
 @quiz_session_router.get("/{session_id}/leaderboard/", response_model=List[ParticipantResultResponse])
 async def quiz_session_leaderboard(
         session_id: int,

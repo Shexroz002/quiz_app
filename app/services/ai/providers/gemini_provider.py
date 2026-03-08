@@ -44,6 +44,7 @@ class GeminiProvider(AIProvider):
     ) -> AIQuizParseResult:
         pdf_path = req.pdf_path
         uploaded_file = None
+        uploaded_file_name = None
 
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"Fayl topilmadi: {pdf_path}")
@@ -58,30 +59,52 @@ class GeminiProvider(AIProvider):
                     config={"mime_type": "application/pdf"},
                 )
 
+            uploaded_file_name = getattr(uploaded_file, "name", None)
+
             if progress:
                 await progress(25, "PDF qayta ishlashga yuborildi")
 
-            uploaded_file = await self._wait_until_ready(uploaded_file.name, timeout_sec=req.timeout_sec)
+            uploaded_file = await self._wait_until_ready(
+                uploaded_file_name,
+                timeout_sec=req.timeout_sec,
+            )
 
             if progress:
                 await progress(55, "AI savollar yaratmoqda")
+
             config = types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=req.schema,
-            )
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[req.prompt, uploaded_file],
-                config=config
+                temperature=0.1,
             )
 
-            raw_text = getattr(response, "text", None) or ""
-            # Agar response.text JSON bo'lsa:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[
+                    types.Part.from_text(text=req.prompt),
+                    uploaded_file,
+                ],
+                config=config,
+            )
+
+            raw_text = response.text
+
+            if not raw_text:
+                if progress:
+                    await progress(100, "AI javob berishda xatolik yuz berdi","Bo'sh javob olindi")
+                raise ValueError("AI javob bo'sh")
+
+
             try:
                 data = json.loads(raw_text)
                 print("✅ JSON muvaffaqiyatli ajratildi")
-            except Exception as e:
-                raise ValueError(f"JSON parsing error: {e}\nRaw response: {response.text}")
+            except json.JSONDecodeError as e:
+                if progress:
+                    await progress(100, "AI javob berishda xatolik yuz berdi")
+                raise ValueError(
+                    f"JSON parsing error: {e.msg} (line={e.lineno}, column={e.colno})\n"
+                    f"Raw response: {raw_text}"
+                ) from e
 
             if progress:
                 await progress(80, "AI javobi olindi")
@@ -94,9 +117,12 @@ class GeminiProvider(AIProvider):
             )
 
         finally:
-            # temp file delete
-            if uploaded_file:
+            if uploaded_file_name:
                 try:
-                    self.client.files.delete(name=uploaded_file.name)
-                except Exception as e:
-                    self.logger.warning(f"Gemini temp file delete failed for {e}", exc_info=True)
+                    self.client.files.delete(name=uploaded_file_name)
+                except Exception:
+                    self.logger.warning(
+                        "Gemini temp file delete failed for %s",
+                        uploaded_file_name,
+                        exc_info=True,
+                    )

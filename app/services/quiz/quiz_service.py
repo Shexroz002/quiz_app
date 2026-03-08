@@ -52,6 +52,8 @@ async def save_quiz_from_json(
     try:
         quiz = Quiz(
             title=data["quiz_title"],
+            subject=data.get("subject"),
+            description=data.get("description"),
             user_id=user_id
         )
         db.add(quiz)
