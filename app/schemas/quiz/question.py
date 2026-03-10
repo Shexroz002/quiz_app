@@ -4,6 +4,7 @@ from typing import Optional, List
 
 BASE_URL = 'http://localhost:8000'
 class QuestionImageBase(BaseModel):
+    id: int
     image_url: str= None
 
     @field_serializer("image_url")

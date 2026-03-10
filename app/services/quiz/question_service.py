@@ -14,7 +14,7 @@ class QuestionService:
         self.repo = QuestionRepository(db)
         self.db = db
 
-    async def detail(self, question_id:int,user_id:int) -> Question:
+    async def detail(self, question_id: int, user_id: int) -> Question:
         return await self.repo.detail(question_id, user_id)
 
     async def upload_image_to_question(self, question_id: int, user_id: int, image: UploadFile) -> Question:
@@ -38,6 +38,16 @@ class QuestionService:
 
         await self.db.commit()
         return upload_image
+
+    async def delete_question_image(self, question_id: int, user_id: int, image_id: int) -> None:
+        deleted_image = await self.repo.delete_question_image(question_id, user_id, image_id)
+        await self.db.commit()
+        return deleted_image
+
+    async def update_correct_option(self, question_id: int, user_id: int, option_id: int) -> Question:
+        updated_question = await self.repo.update_correct_option(question_id, user_id, option_id)
+        await self.db.commit()
+        return updated_question
 
 
 def get_question_service(db: AsyncSession = Depends(get_db)) -> QuestionService:

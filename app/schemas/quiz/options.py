@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 class OptionBase(BaseModel):
+    id: int
     label: str
     text: str
     is_correct: bool
