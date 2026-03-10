@@ -18,7 +18,7 @@ from app.schemas.quiz.quiz_session import (
     StartSessionResponse, StartSessionSinglePlayerResponse, StartSessionSinglePlayerBaseResponse,
     QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow, ParticipantResultResponse
 )
-from app.schemas.quiz.session_participant import SessionParticipantList
+from app.schemas.quiz.session_participant import SessionParticipantList, SessionDetail
 from app.services.notification.notification_service import get_notification_service
 from app.services.quiz.quiz_session import get_quiz_session_service
 
@@ -38,7 +38,7 @@ async def quiz_session_create(
     return await quiz_session.create(quiz_session_data, current_user)
 
 
-@quiz_session_router.post("/multiplayer/join/", response_model=List[SessionParticipantList])
+@quiz_session_router.post("/multiplayer/join/", response_model=SessionDetail)
 async def quiz_session_join(
         payload: JoinSessionRequest,
         current_user: User = Depends(get_current_user),
@@ -74,6 +74,13 @@ async def start_quiz_session(
 ):
     return await quiz_session.start_session(session_id, current_user)
 
+@quiz_session_router.get("/multiplayer/{session_id}/questions/", response_model=StartSessionSinglePlayerResponse)
+async def get_quiz_session_questions(
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.multiplayer_session_quiz_info(session_id,current_user.id)
 
 @quiz_session_router.post("/multiplayer/{session_id}/answer/", response_model=SubmitAnswerResponse)
 async def submit_answer(
@@ -87,7 +94,7 @@ async def submit_answer(
 """ Invite other players to the quiz session"""
 @quiz_session_router.post("/multiplayer/{session_id}/invite/")
 async def invite_players(
-        session_id: int,
+        session_code: str,
         recipient_id: int = Body(..., embed=True, description="ID of the user to invite"),
         current_user: User = Depends(get_current_user),
         notification_service=Depends(get_notification_service),
@@ -97,9 +104,9 @@ async def invite_players(
         "sender_id": current_user.id,
         "type": "test_invite",
         "action_type": "test_invite",
-        "payload": {"session_id": session_id},
+        "payload": {"session_code": session_code},
         "title": "Quiz Session  taklif",
-        "message": "You have been invited to join a quiz session"
+        "message": f"{current_user.first_name} {current_user.last_name} sizni birgalikda test ishlashga taklif qilmoqda."
     }
     data_schema = NotificationCreateSchema(**data)
     await notification_service.create_notification(data_schema)

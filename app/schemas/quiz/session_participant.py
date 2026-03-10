@@ -24,3 +24,6 @@ class SessionParticipantList(BaseModel):
         if value.startswith("http"):
             return value
         return f"{BASE_URL}/{value}"
+
+class SessionDetail(BaseModel):
+    id: int

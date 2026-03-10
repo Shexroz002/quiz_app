@@ -71,7 +71,7 @@ services:
     command: >
       celery -A app.core.celery_app worker
       --loglevel=info
-      --concurrency=2
+      --concurrency=24
       -Q celery,pdf_ai_queue
     networks:
       - quiz-network

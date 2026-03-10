@@ -121,7 +121,7 @@ class QuizSessionService:
             )
             await self.db.commit()
 
-        return await self.participant_repo.get_participant_list(quiz_session.id)
+        return quiz_session
 
     async def get_participant(self, session_id: int, user: User):
         session = await self.session_repo.get_by_id(session_id)
@@ -364,8 +364,25 @@ class QuizSessionService:
             "questions": questions,
         }
 
+    async def multiplayer_session_quiz_info(self, session_id: int, user_id: int):
+        is_session_user = await self.participant_repo.get_by_session_user(session_id, user_id)
+        if not is_session_user:
+            raise HTTPException(status_code=403, detail="User is not a participant of this session")
+
+        quiz_session = await self.session_repo.get_single_player_session(session_id, status="running")
+        questions = await self.question_repo.list_quiz_session_questions(quiz_id=quiz_session.quiz_id)
+        return {
+            "session_id": quiz_session.id,
+            "quiz_id": quiz_session.quiz_id,
+            "questions_count": len(questions),
+            "status": quiz_session.status,
+            "started_at": quiz_session.started_at,
+            "finished_at": quiz_session.finished_at,
+            "questions": questions,
+        }
+
     async def get_single_player_quiz_info(self, session_id: int, user_id: int, is_question=True, status="running"):
-        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id, status=status)
+        quiz_session = await self.session_repo.get_single_player_session(session_id, status=status)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -386,7 +403,7 @@ class QuizSessionService:
         return result
 
     async def finish_single_player_quiz(self, session_id: int, user_id: int, answers: list[SubmitAnswerRequest]):
-        quiz_session = await self.session_repo.get_single_player_session(session_id, user_id)
+        quiz_session = await self.session_repo.get_single_player_session(session_id)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -435,12 +452,12 @@ class QuizSessionService:
             raise HTTPException(status_code=404, detail="Session not found")
         return quiz_session
 
-    async def personal_quiz_session_history(self, user_id: int,search:str):
-        session_history = await self.session_repo.get_personal_quiz_session_history(user_id,search)
+    async def personal_quiz_session_history(self, user_id: int, search: str):
+        session_history = await self.session_repo.get_personal_quiz_session_history(user_id, search)
         return session_history
 
-    async def session_participant_rank_list(self, session_id: int,user_id: int):
-        rank_list = await self.session_repo.get_session_participant_rank_list(session_id,user_id)
+    async def session_participant_rank_list(self, session_id: int, user_id: int):
+        rank_list = await self.session_repo.get_session_participant_rank_list(session_id, user_id)
         return rank_list
 
 

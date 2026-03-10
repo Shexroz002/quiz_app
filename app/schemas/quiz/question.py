@@ -13,7 +13,7 @@ class QuestionImageBase(BaseModel):
             return value
         if value.startswith("http"):
             return value
-        return f"{BASE_URL}/{value}"
+        return f"{BASE_URL}{value}"
 
 
 class QuestionBase(BaseModel):
