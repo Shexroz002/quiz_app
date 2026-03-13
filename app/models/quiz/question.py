@@ -19,6 +19,7 @@ class Question(BaseModel):
     topic: Mapped[str | None] = mapped_column(String(255))
 
     quiz = relationship("Quiz", back_populates="questions")
+    attempt_answers = relationship("AttemptAnswer", back_populates="question", cascade="all, delete-orphan")
 
     options = relationship(
         "Option",

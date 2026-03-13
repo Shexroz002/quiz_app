@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import ForeignKey, String, TIMESTAMP, func, Boolean
+from sqlalchemy import ForeignKey, String, TIMESTAMP, func, Boolean, Enum as SQLEnum
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from app.models.base import BaseModel
 from enum import Enum
@@ -22,9 +22,9 @@ class SessionParticipant(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE")
     )
     participant_status: Mapped[ParticipantStatus] = mapped_column(
-        String(40),
-        default=ParticipantStatus.PREPARING.value,
-        nullable=True
+        SQLEnum(ParticipantStatus, name="participant_status_enum"),
+        default=ParticipantStatus.PREPARING,
+        nullable=False
     )
 
     nickname: Mapped[str] = mapped_column(String(50))

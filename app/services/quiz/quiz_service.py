@@ -41,6 +41,15 @@ class QuizService:
     async def detail(self, user_id, quiz_id):
         return await self.repo.detail(user_id, quiz_id)
 
+    async def topic_statistics(self, user_id: int, subject: str, search: str | None = None):
+        return await self.repo.get_topic_statistics(user_id, subject, search)
+
+    async def subject_statistics(self, user_id: int):
+        return await self.repo.get_subject_statistics(user_id)
+
+    async def overall_statistic_cards(self, user_id: int):
+        return await self.repo.get_overall_statistic_cards(user_id)
+
 
 def get_quiz_service(db: AsyncSession = Depends(get_db)) -> QuizService:
     return QuizService(db)

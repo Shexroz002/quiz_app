@@ -15,7 +15,9 @@ class AttemptAnswer(BaseModel):
         ForeignKey("quiz_attempts.id", ondelete="CASCADE")
     )
 
-    question_id: Mapped[int] = mapped_column(Integer)
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id", ondelete="CASCADE")
+    )
 
     selected_option: Mapped[str] = mapped_column(String(5))
 
@@ -27,3 +29,4 @@ class AttemptAnswer(BaseModel):
     )
 
     attempt = relationship("QuizAttempt", back_populates="answers")
+    question = relationship("Question", back_populates="attempt_answers")
