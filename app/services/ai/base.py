@@ -1,9 +1,9 @@
 from __future__ import annotations
-
+from typing import Any
 from dataclasses import dataclass
 from typing import Protocol, Callable, Awaitable, Any, Optional
 
-ProgressCb = Callable[[int, str], Awaitable[None]]
+ProgressCb = Callable[[int, str,  str | None,], Awaitable[None]]
 
 @dataclass
 class AIQuizParseRequest:

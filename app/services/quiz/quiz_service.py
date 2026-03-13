@@ -1,5 +1,6 @@
 import logging
 import re
+from typing import Optional
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database.base import get_db
 from app.models.quiz import Quiz, Question, Option, QuestionImage
 from app.repositories.quiz.quiz_repo import QuizRepository
+from app.services.ai.base import ProgressCb
 from app.services.pdf.pdf_service import PDFService
 
 
@@ -30,12 +32,13 @@ class QuizService:
     async def quiz_answer_list(self, quiz_id: int):
         def conver_list_do_dict(lst):
             return {item['id']: item['label'] for item in lst}
+
         return conver_list_do_dict(await self.repo.quiz_answer_by_id(quiz_id))
 
-    async def quiz_list(self,user_id,**kwargs):
-        return await self.repo.quiz_list(user_id,**kwargs)
+    async def quiz_list(self, user_id, **kwargs):
+        return await self.repo.quiz_list(user_id, **kwargs)
 
-    async def detail(self,user_id, quiz_id):
+    async def detail(self, user_id, quiz_id):
         return await self.repo.detail(user_id, quiz_id)
 
 
@@ -44,10 +47,11 @@ def get_quiz_service(db: AsyncSession = Depends(get_db)) -> QuizService:
 
 
 async def save_quiz_from_json(
-    db: AsyncSession,
-    data: dict,
-    pdf_path: str,
-    user_id: int
+        db: AsyncSession,
+        data: dict,
+        pdf_path: str,
+        user_id: int,
+        progress: Optional[ProgressCb] = None,
 ) -> tuple[int, int]:
     try:
         quiz = Quiz(
@@ -102,6 +106,8 @@ async def save_quiz_from_json(
 
     except Exception as e:
         await db.rollback()
+        if progress:
+            await progress(100, "",
+                           "Testni saqlashda xatolik yuz berdi. Iltimos, ma'lumotlarni tekshiring va qayta urinib ko‘ring.")
         logging.exception("Failed to save quiz from JSON: %s", e)
         raise
-

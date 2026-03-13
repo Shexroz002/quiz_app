@@ -41,7 +41,7 @@ class AIQuizParser:
         res = await self.provider.parse_quiz_from_pdf(req, progress=progress)
 
         if progress:
-            await progress(85, "AI javobi JSON formatga o‘tkazilmoqda")
+            await progress(85, "AI javobi JSON formatga o‘tkazilmoqda","")
 
         if isinstance(res.data, dict) and res.data:
             return res.data

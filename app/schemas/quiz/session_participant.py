@@ -15,6 +15,8 @@ class SessionParticipantList(BaseModel):
     is_host: bool
     first_name: str | None
     last_name: str | None
+    participant_status: str | None
+    user_id:int
 
     @field_serializer("profile_image")
     def add_base_url(self, value: str):
@@ -24,6 +26,7 @@ class SessionParticipantList(BaseModel):
         if value.startswith("http"):
             return value
         return f"{BASE_URL}/{value}"
+
 
 class SessionDetail(BaseModel):
     id: int

@@ -3,8 +3,10 @@ from __future__ import annotations
 from json import JSONDecodeError
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import update
 
 from app.core.database.base import AsyncSessionLocal
+from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus, SessionParticipant
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.websocket.manager import session_ws_manager
@@ -27,6 +29,15 @@ async def _is_authorized_for_session(user_id: int, session_id: int) -> bool:
 
         return await participant_repo.is_participant(session_id=session_id, user_id=user_id)
 
+async def _change_participant(user_id: int, session_id: int) -> None:
+    async with AsyncSessionLocal() as db:
+        participant_repo = SessionParticipantRepository(db)
+        participant = await participant_repo.get_by_session_user(session_id=session_id, user_id=user_id)
+        stm=update(SessionParticipant).where(SessionParticipant.id == participant.id).values(
+            participant_status=ParticipantStatus.READY.value)
+        await db.execute(stm)
+        await db.commit()
+
 
 # WebSocket endpoint for quiz session participation and real-time updates
 
@@ -42,17 +53,14 @@ async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
         return
 
     await session_ws_manager.connect(websocket, session_id)
-
+    await _change_participant(user_id=user.id, session_id=session_id)
     await session_ws_manager.broadcast(
         session_id=session_id,
-        event="participant_connected",
+        event="participant_read",
         payload={
             "user_id": user.id,
-            "username": user.username,
-            "avatar_url": user.profile_image if user.profile_image else None,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "participants_online": session_ws_manager.count(session_id)},
+            "status": "ready",
+        },
     )
 
     try:
@@ -80,14 +88,3 @@ async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
         pass
     finally:
         session_ws_manager.disconnect(websocket, session_id)
-        await session_ws_manager.broadcast(
-            session_id=session_id,
-            event="participant_disconnected",
-            payload={
-                "user_id": user.id,
-                "username": user.username,
-                "avatar_url": user.profile_image if user.profile_image else None,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "participants_online": session_ws_manager.count(session_id)},
-        )

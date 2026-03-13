@@ -91,16 +91,16 @@ class GeminiProvider(AIProvider):
 
             if not raw_text:
                 if progress:
-                    await progress(100, "AI javob berishda xatolik yuz berdi","Bo'sh javob olindi")
+                    await progress(100, "",
+                                   "AI javob berishda xatolik yuz berdi. Iltimos, PDF faylni tekshiring va qayta urinib ko‘ring.")
                 raise ValueError("AI javob bo'sh")
-
 
             try:
                 data = json.loads(raw_text)
                 print("✅ JSON muvaffaqiyatli ajratildi")
             except json.JSONDecodeError as e:
                 if progress:
-                    await progress(100, "AI javob berishda xatolik yuz berdi")
+                    await progress(100, "", "AI javob berishda xatolik yuz berdi")
                 raise ValueError(
                     f"JSON parsing error: {e.msg} (line={e.lineno}, column={e.colno})\n"
                     f"Raw response: {raw_text}"

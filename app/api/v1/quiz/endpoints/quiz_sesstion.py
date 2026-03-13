@@ -44,7 +44,18 @@ async def quiz_session_join(
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.add_participant(payload.session_code, current_user)
+    return await quiz_session.join_quiz_session(payload.session_code, current_user)
+
+
+# disconnect from quiz session
+@quiz_session_router.post("/multiplayer/leave/", status_code=204)
+async def quiz_session_leave(
+        session_id: int = Body(..., embed=True, description="ID of the session to leave"),
+        participant_id: int = Body(..., description="ID of the participant to leave"),
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.disconnect_participant(session_id, participant_id)
 
 
 @quiz_session_router.get("/multiplayer/{session_id}/info/", response_model=QuizSessionResponse)
@@ -74,13 +85,15 @@ async def start_quiz_session(
 ):
     return await quiz_session.start_session(session_id, current_user)
 
+
 @quiz_session_router.get("/multiplayer/{session_id}/questions/", response_model=StartSessionSinglePlayerResponse)
 async def get_quiz_session_questions(
         session_id: int,
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.multiplayer_session_quiz_info(session_id,current_user.id)
+    return await quiz_session.multiplayer_session_quiz_info(session_id, current_user.id)
+
 
 @quiz_session_router.post("/multiplayer/{session_id}/answer/", response_model=SubmitAnswerResponse)
 async def submit_answer(
@@ -91,7 +104,10 @@ async def submit_answer(
 ):
     return await quiz_session.submit_answer(session_id, current_user, payload)
 
+
 """ Invite other players to the quiz session"""
+
+
 @quiz_session_router.post("/multiplayer/{session_id}/invite/")
 async def invite_players(
         session_code: str,
@@ -99,7 +115,7 @@ async def invite_players(
         current_user: User = Depends(get_current_user),
         notification_service=Depends(get_notification_service),
 ):
-    data={
+    data = {
         "recipient_id": recipient_id,
         "sender_id": current_user.id,
         "type": "test_invite",

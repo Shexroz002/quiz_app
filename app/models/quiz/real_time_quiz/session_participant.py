@@ -2,11 +2,17 @@ from datetime import datetime
 from sqlalchemy import ForeignKey, String, TIMESTAMP, func, Boolean
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from app.models.base import BaseModel
+from enum import Enum
+
+
+class ParticipantStatus(str, Enum):
+    PREPARING = "preparing"
+    READY = "ready"
+    DISCONNECTED = "disconnected"
 
 
 class SessionParticipant(BaseModel):
     __tablename__ = "session_participants"
-
 
     session_id: Mapped[int] = mapped_column(
         ForeignKey("quiz_sessions.id", ondelete="CASCADE")
@@ -14,6 +20,11 @@ class SessionParticipant(BaseModel):
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE")
+    )
+    participant_status: Mapped[ParticipantStatus] = mapped_column(
+        String(40),
+        default=ParticipantStatus.PREPARING.value,
+        nullable=True
     )
 
     nickname: Mapped[str] = mapped_column(String(50))

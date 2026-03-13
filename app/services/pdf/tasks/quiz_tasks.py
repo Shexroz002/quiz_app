@@ -79,6 +79,7 @@ def process_pdf_task(self, job_id: str):
                 data=result,
                 pdf_path=job.file_path,
                 user_id=job.user_id,
+                progress = parser_progress,
             )
 
             await update_job_status(

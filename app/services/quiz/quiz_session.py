@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.models import User
+from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus
 from app.repositories.quiz.question_repo import QuestionRepository
 from app.repositories.quiz.quiz_attempt_repo import QuizAttemptRepository
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
+from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest
 from app.schemas.quiz.quiz_session import QuizSessionCreate
 from app.websocket import session_ws_manager
@@ -101,7 +103,7 @@ class QuizSessionService:
         }
         return result
 
-    async def add_participant(self, session_code: str, user: User):
+    async def join_quiz_session(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Invalid session code")
@@ -120,7 +122,26 @@ class QuizSessionService:
                 }
             )
             await self.db.commit()
-
+            await session_ws_manager.broadcast(
+                session_id=quiz_session.id,
+                event="participant_joined",
+                payload={
+                    "user_id": user.id,
+                    "username": user.username,
+                    "avatar_url": f"{BASE_URL}{user.profile_image}" if user.profile_image else None,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "status": ParticipantStatus.PREPARING.value,
+                    "participants_online": session_ws_manager.count(quiz_session.id)},
+            )
+        await session_ws_manager.broadcast(
+            session_id=quiz_session.id,
+            event="participant_reconnected",
+            payload={
+                "user_id": user.id,
+                "status": ParticipantStatus.PREPARING.value,
+                "participants_online": session_ws_manager.count(quiz_session.id)},
+        )
         return quiz_session
 
     async def get_participant(self, session_id: int, user: User):
@@ -138,6 +159,9 @@ class QuizSessionService:
         quiz_session = await self.session_repo.get_for_host(session_id, user.id)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found or access denied")
+
+        if quiz_session.host_id != user.id:
+            raise HTTPException(status_code=403, detail="Only host can start the session")
 
         if quiz_session.status != "waiting":
             raise HTTPException(status_code=400, detail="Session is not in waiting state")
@@ -194,6 +218,7 @@ class QuizSessionService:
         )
         if not in_quiz:
             raise HTTPException(status_code=400, detail="Question does not belong to this quiz session")
+
         attempt = await self.attempt_repo.get_or_create(
             session_id=session_id,
             participant_id=participant.id,
@@ -432,7 +457,7 @@ class QuizSessionService:
 
         attempt.finished = True
         attempt.finished_at = datetime.now()
-        quiz_session.status = "finished"
+        # quiz_session.status = "finished"
         quiz_session.finished_at = datetime.now()
         result = await self._build_attempt_result(
             session_id=session_id,
@@ -459,6 +484,18 @@ class QuizSessionService:
     async def session_participant_rank_list(self, session_id: int, user_id: int):
         rank_list = await self.session_repo.get_session_participant_rank_list(session_id, user_id)
         return rank_list
+
+    async def disconnect_participant(self, session_id, participant_id: int) -> None:
+        updated_participant = await self.participant_repo.disconnect_participant(participant_id)
+        await self.db.commit()
+        await session_ws_manager.broadcast(
+            session_id=session_id,
+            event="participant_disconnected",
+            payload={
+                "user_id": updated_participant.user_id,
+                "status": ParticipantStatus.DISCONNECTED.value,
+            },
+        )
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:
