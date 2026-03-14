@@ -22,9 +22,14 @@ class SessionParticipant(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE")
     )
     participant_status: Mapped[ParticipantStatus] = mapped_column(
-        SQLEnum(ParticipantStatus, name="participant_status_enum"),
+        SQLEnum(
+            ParticipantStatus,
+            name="participant_status_enum",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
         default=ParticipantStatus.PREPARING,
-        nullable=False
+        server_default=ParticipantStatus.PREPARING.value,
     )
 
     nickname: Mapped[str] = mapped_column(String(50))

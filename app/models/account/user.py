@@ -50,7 +50,8 @@ class User(BaseModel):
     education_level: Mapped[EducationLevel] = mapped_column(
         SqlEnum(
             EducationLevel,
-            name="education_level"
+            name="education_level",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
         ),
         nullable=True
     )

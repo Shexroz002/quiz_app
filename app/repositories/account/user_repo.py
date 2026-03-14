@@ -87,6 +87,7 @@ class UserRepository(BaseRepository[User]):
             }
             for r in result
         ]
+
     async def user_full_information(self, user_id: int):
         stmt = (
             select(User)
@@ -97,3 +98,14 @@ class UserRepository(BaseRepository[User]):
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def update_user_detail(self, user_id: int, data: dict) -> User | None:
+        user = await self.get_by_id(user_id)
+        if user is None:
+            return None
+
+        for field, value in data.items():
+            setattr(user, field, value)
+
+        await self.db.flush()
+        return user

@@ -2,6 +2,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_serializer
 
+from app.models.account.user import EducationLevel
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.subject.subject import SubjectBase, SubjectIdListSchema
 
@@ -27,13 +28,6 @@ class UserContactListSchema(UserListSchema):
 
 
 class UpdateUserSchema(BaseModel):
-    username: str | None = Field(
-        default=None,
-        min_length=3,
-        max_length=30,
-        pattern=r"^[a-zA-Z0-9_]+$",
-        description="Unique username, only letters, numbers, underscores",
-    )
     first_name: str | None = Field(
         ...,
         min_length=2,
@@ -81,3 +75,12 @@ class UserDetailInfoSchema(UserShortInfoSchema):
     subjects: list[UserSubjectSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+class UserDetailPatchSchema(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    email: EmailStr | None = None
+    phone_number: str | None = None
+    school_name: str | None = None
+    education_level: EducationLevel | None = None
+    subject_ids: list[int] | None = None

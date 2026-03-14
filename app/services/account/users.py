@@ -2,7 +2,7 @@ from fastapi import HTTPException, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
-from app.repositories.account import UserRepository
+from app.repositories.account import UserRepository, UserSubjectRepository
 from app.services.base import BaseService
 
 
@@ -10,6 +10,8 @@ class UserService(BaseService):
 
     def __init__(self, db: AsyncSession):
         super().__init__(UserRepository(db))
+        self.user_subject_repo = UserSubjectRepository(db)
+        self.db = db
 
     async def update_user(
             self,
@@ -21,18 +23,14 @@ class UserService(BaseService):
             raise HTTPException(403, "Permission denied")
 
         user = await self.get(user_id)
-
-        conflict = await self.repo.check_conflict(
-            user_id,
-            update_schema.username
-        )
-
-        if conflict:
-            raise HTTPException(400, "Username or email exists")
+        subject_ids = update_schema.subject_ids
+        if subject_ids:
+            await self.user_subject_repo.create_or_update_subject(user.id, subject_ids)
 
         update_data = update_schema.model_dump(exclude_unset=True)
-
-        return await self.repo.update(user, update_data)
+        user_update_data = await self.repo.update(user, update_data)
+        await self.db.commit()
+        return user_update_data
 
     async def upload_avatar(self, user_id: int, avatar: UploadFile):
         user = await self.repo.get(user_id)
@@ -56,7 +54,7 @@ class UserService(BaseService):
     async def get_by_username(self, username: str):
         return await self.repo.get_by_username(username)
 
-    async def search_users_for_contact(self,current_user_id:int, search: str=None):
+    async def search_users_for_contact(self, current_user_id: int, search: str = None):
         return await self.repo.users_with_contact_status(current_user_id=current_user_id, search=search)
 
 
