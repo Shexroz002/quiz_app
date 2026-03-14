@@ -3,6 +3,7 @@ from typing import Annotated
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_serializer
 
 from app.schemas.quiz.question import BASE_URL
+from app.schemas.subject.subject import SubjectBase, SubjectIdListSchema
 
 
 class UserListSchema(BaseModel):
@@ -20,8 +21,10 @@ class UserListSchema(BaseModel):
             return value
         return f"{BASE_URL}/{value}"
 
+
 class UserContactListSchema(UserListSchema):
     contact_available: bool
+
 
 class UpdateUserSchema(BaseModel):
     username: str | None = Field(
@@ -31,13 +34,13 @@ class UpdateUserSchema(BaseModel):
         pattern=r"^[a-zA-Z0-9_]+$",
         description="Unique username, only letters, numbers, underscores",
     )
-    first_name: str| None = Field(
+    first_name: str | None = Field(
         ...,
         min_length=2,
         max_length=50,
         description="First name should be between 2 and 50 characters"
     )
-    last_name: str| None = Field(
+    last_name: str | None = Field(
         ...,
         min_length=2,
         max_length=50,
@@ -50,7 +53,7 @@ class UserShortInfoSchema(BaseModel):
     username: str
     first_name: str
     last_name: str
-    role: str|None=None
+    role: str | None = None
     profile_image: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -62,3 +65,19 @@ class UserShortInfoSchema(BaseModel):
         if value.startswith("http"):
             return value
         return f"{BASE_URL}/{value}"
+
+
+class UserSubjectSchema(BaseModel):
+    id: int
+    subject: SubjectIdListSchema
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UserDetailInfoSchema(UserShortInfoSchema):
+    email: EmailStr | None
+    phone_number: str | None
+    school_name: str | None
+    education_level: str | None
+    subjects: list[UserSubjectSchema] = []
+
+    model_config = ConfigDict(from_attributes=True)

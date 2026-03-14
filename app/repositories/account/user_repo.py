@@ -1,7 +1,8 @@
 from sqlalchemy import select, case, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models import Contact
+from app.models import Contact, UserSubject
 from app.models.account.user import User
 from app.repositories.base.base_repository import BaseRepository
 
@@ -86,4 +87,13 @@ class UserRepository(BaseRepository[User]):
             }
             for r in result
         ]
-
+    async def user_full_information(self, user_id: int):
+        stmt = (
+            select(User)
+            .where(User.id == user_id)
+            .options(
+                selectinload(User.subjects).selectinload(UserSubject.subject)
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()

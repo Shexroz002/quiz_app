@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.api.v1.auth.dependencies.current_user import get_current_user
 from app.schemas.account.auth.login import LoginResponse, RefreshRequest, TokenResponse
 from app.schemas.account.auth.register import RegisterSchema
-from app.schemas.account.users import UserShortInfoSchema
+from app.schemas.account.users import UserShortInfoSchema, UserDetailInfoSchema
 from app.services.account.auth_service import AuthService, get_auth_service
 
 login_router = APIRouter(prefix="/auth")
@@ -23,9 +23,9 @@ async def refresh_token(
 ):
     return await auth_service.refresh(refresh_request.refresh_token)
 
-@login_router.get("/me/",response_model=UserShortInfoSchema)
-async def me(current_user=Depends(get_current_user)):
-    return current_user
+@login_router.get("/me/",response_model=UserDetailInfoSchema)
+async def me(current_user=Depends(get_current_user), auth_service: AuthService = Depends(get_auth_service)):
+    return await auth_service.user_full_information(current_user.id)
 
 
 @login_router.post("/register/", status_code=201, response_model=UserShortInfoSchema)

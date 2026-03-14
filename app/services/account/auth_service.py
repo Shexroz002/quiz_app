@@ -111,6 +111,8 @@ class AuthService:
             raise HTTPException(401, "User not found")
 
         return user
+    async def user_full_information(self, user_id: int):
+       return await self.repo.user_full_information(user_id)
 
 
 def get_auth_service(db: AsyncSession = Depends(get_db)) -> AuthService:
