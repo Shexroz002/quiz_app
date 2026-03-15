@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database.base import get_db
 from app.models.quiz import Quiz, Question, Option, QuestionImage
 from app.repositories.quiz.quiz_repo import QuizRepository
+from app.services.ai.ai_report_generation import report_generation
 from app.services.ai.base import ProgressCb
 from app.services.pdf.pdf_service import PDFService
 
@@ -46,6 +47,11 @@ class QuizService:
 
     async def subject_statistics(self, user_id: int):
         return await self.repo.get_subject_statistics(user_id)
+
+    async def recommendation(self, user_id: int):
+        subject_statistics = await self.repo.get_subject_statistics(user_id)
+        recommendation_text = report_generation(subject_statistics)
+        return recommendation_text
 
     async def overall_statistic_cards(self, user_id: int):
         return await self.repo.get_overall_statistic_cards(user_id)

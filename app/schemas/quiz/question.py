@@ -9,12 +9,11 @@ class QuestionImageBase(BaseModel):
 
     @field_serializer("image_url")
     def add_base_url(self, value: str):
-        print("Serializing image_url:", value)
         if value is None:
             return value
         if value.startswith("http"):
             return value
-        return f"{BASE_URL}{value}"
+        return f"{BASE_URL}/{value}"
 
 
 class QuestionBase(BaseModel):

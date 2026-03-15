@@ -45,7 +45,9 @@ async def topic_statistics(
 async def subject_statistics(current_user=Depends(get_current_user), service_layer=Depends(get_quiz_service)):
     return await service_layer.subject_statistics(current_user.id)
 
-
+@quiz_router.get("/analytics/recommendation")
+async def recommendation(current_user=Depends(get_current_user), service_layer=Depends(get_quiz_service)):
+    return await service_layer.recommendation(current_user.id)
 
 @quiz_router.get("/analytics/overall/cards", response_model=OverallStatisticCardsResponse | None,)
 async def overall_statistic_cards(current_user=Depends(get_current_user), service_layer=Depends(get_quiz_service)):

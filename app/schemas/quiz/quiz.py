@@ -39,6 +39,8 @@ class TopicStatisticResponse(BaseModel):
     wrong_answer: int
     total_answer: int
     percentage: float
+    first_test_date: datetime.date | None = Field(examples=[datetime.date(2021, 1, 1)])
+    last_test_date: datetime.date | None = Field(examples=[datetime.date(2021, 12, 31)])
 
 class SubjectStatisticResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -48,6 +50,8 @@ class SubjectStatisticResponse(BaseModel):
     wrong_answer: int = Field(examples=[8])
     total_answer: int = Field(examples=[20])
     percentage: float = Field(examples=[60.0])
+    first_attempt_date: datetime.date | None = Field(examples=[datetime.date(2021, 1, 1)])
+    last_attempt_date: datetime.date | None = Field(examples=[datetime.date(2021, 12, 31)])
 
 
 class OverallStatisticCardsResponse(BaseModel):

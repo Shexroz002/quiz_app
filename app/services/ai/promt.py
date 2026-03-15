@@ -1,104 +1,83 @@
 QUIZ_PROMPT = """
-You are an AI system that extracts structured test data from a PDF file.
+You are an AI system that extracts structured quiz data from a PDF file.
+
 TASK:
-Analyze ALL test questions contained in the provided PDF and convert them into the EXACT structured JSON format defined below.
+Analyze all test questions in the provided PDF and return them in the exact JSON structure defined below.
 
-STRICT OUTPUT RULES (VERY IMPORTANT):
-1. Output MUST be valid JSON only.
-2. Do NOT include explanations, comments, markdown, or extra text.
-3. Do NOT wrap JSON inside code blocks.
-4. The response must start with `{` and end with `}`.
-5. Follow the JSON schema EXACTLY. Do not add or remove fields.
-6. If a field does not exist in the source, return:
-   - empty string "" for text fields
-   - empty array [] for lists
-   - null only if value is truly unknown.
+OUTPUT RULES:
+1. Return valid JSON only.
+2. Do not include markdown, comments, explanations, or extra text.
+3. Do not wrap the JSON in code fences.
+4. The response must start with { and end with }.
+5. Follow the schema exactly. Do not add, remove, or rename fields.
+6. If a value is missing in the source:
+   - use "" for text fields
+   - use [] for arrays
+   - use null only when the value is truly unknown
 
-CONTENT RULES:
-1. ALL mathematical, physics, and chemistry formulas MUST be written in LaTeX format.
-    All LaTeX backslashes MUST be escaped for JSON.
-    Example:
-        $\frac{a}{b}$ → "$\\frac{a}{b}$"
-2. Preserve formulas as digital text (never plain text approximations).
+EXTRACTION RULES:
+1. Extract all questions from the PDF.
+2. Preserve the original language of the question text.
+3. Assign a unique incremental numeric id to each question.
+4. Detect the subject automatically and set it in:
+   - root "subject"
+   - each question "subject"
+5. Write the quiz description in Uzbek, maximum 235 characters.
+6. If a question contains a table, convert it to Markdown and store it in "table_markdown".
+7. If a question contains images:
+   - use image URLs if available
+   - otherwise use placeholders like ["[image_1]", "[image_2]"]
+8. Identify the correct answer if possible:
+   - set "is_correct": true only for the correct option
+   - set all other options to false
+   - if unknown, set all options to false
+9. The "meta" field must be in Uzbek and may include useful details such as difficulty and topic.
 
-3. If the question contains tables, convert them into Markdown table format and store inside `table_markdown`.
+FORMULA RULES:
+1. All mathematics, physics, and chemistry formulas must be written in LaTeX.
+2. Preserve formulas as digital text, not plain-text approximations.
+3. All LaTeX backslashes must be escaped for JSON.
+   Examples:
+   - $\\frac{a}{b}$
+   - $\\sqrt{x}$
+   - $\\pi$
+   - ^\\circ
+4. Never output single backslashes in JSON.
 
-4. Extract image references if present:
-   - Use image URLs if available.
-   - Otherwise generate placeholders like:
-     ["[image_1]", "[image_2]"]
+Before returning the result, internally ensure the JSON is syntactically valid.
 
-5. Identify the correct answer whenever possible:
-   - Set `"is_correct": true` only for the correct option.
-   - Others must be false.
-
-6. Detect subject automatically (fizika, matematika, kimyo, bialogiya, etc.).
-
-7. Keep original language of the question text.
-
-8. Each question MUST have unique incremental numeric `id`.
-
-
-9. The `meta` field can include any additional information you find relevant (e.g., difficulty, topic) and must be in uzbek language.
-10. Before sending the answer, you MUST internally validate that the JSON is syntactically correct.
-11. detect subject automatically (fizika, matematika, kimyo, bialogiya, etc.) and set it in the "subject" field.
-12. write description of the quiz in the "description" field in uzbek language and max 235 characters.
-
-JSON ESCAPING RULES (STRICT):
-- Every backslash in LaTeX MUST be double escaped (\\).
-- Never output single backslashes.
-- Escape sequences like \s, \c, \m are INVALID in JSON.
-- Valid examples:
-  \frac → \\frac
-  \sqrt → \\sqrt
-  \pi → \\pi
-  ^\circ → ^\\circ
-  \mathcal → \\mathcal
-
-OUTPUT JSON SCHEMA (DO NOT MODIFY STRUCTURE):
+OUTPUT JSON STRUCTURE:
 
 {
-    "quiz_title": "Fizika Testi",
-    "questions": [
+  "quiz_title": "Fizika Testi",
+  "subject": "physics",
+  "description": "Bu fizika fanidan test savollari to‘plami.",
+  "questions": [
+    {
+      "id": 1,
+      "question": "Quyidagi formulani tanlang: $E=mc^2$",
+      "images": ["[image_1]"],
+      "subject": "physics",
+      "table_markdown": "",
+      "options": [
         {
-            "id": 1,
-            "question": "Quyidagi formulani LaTeX formatida yozing: $E=mc^2$",
-            "images": [
-                "image_1",
-                "image_2"
-            ],
-            "subject": "physics",
-            "table_markdown": "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |",
-            "options": [
-                {
-                    "id": "A",
-                    "text": "$E=mc^2$",
-                    "is_correct": true
-                },
-                {
-                    "id": "B",
-                    "text": "E=mc^2",
-                    "is_correct": false
-                },
-                {
-                    "id": "C",
-                    "text": "$E=\\frac{1}{2}mv^2$",
-                    "is_correct": false
-                },
-                {
-                    "id": "D",
-                    "text": "E=\\sqrt{mc^2}",
-                    "is_correct": false
-                }
-            ],
-            "meta": {
-                "difficulty": "easy",
-                "topic": "Relativity"
-            }
+          "id": "A",
+          "text": "$E=mc^2$",
+          "is_correct": true
+        },
+        {
+          "id": "B",
+          "text": "$E=\\frac{1}{2}mv^2$",
+          "is_correct": false
         }
-    ]
+      ],
+      "meta": {
+        "difficulty": "oson",
+        "topic": "Nisbiylik"
+      }
+    }
+  ]
 }
-
 """
 
 QUIZ_SCHEMA = {
@@ -114,7 +93,10 @@ QUIZ_SCHEMA = {
                 "properties": {
                     "id": {"type": "INTEGER"},
                     "question": {"type": "STRING"},
-                    "images": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "images": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    },
                     "subject": {"type": "STRING"},
                     "table_markdown": {"type": "STRING"},
                     "options": {
@@ -137,9 +119,17 @@ QUIZ_SCHEMA = {
                         }
                     }
                 },
-                "required": ["id", "question", "options"]
+                "required": [
+                    "id",
+                    "question",
+                    "images",
+                    "subject",
+                    "table_markdown",
+                    "options",
+                    "meta"
+                ]
             }
         }
     },
-    "required": ["quiz_title", "questions"]
+    "required": ["quiz_title", "subject", "description", "questions"]
 }
