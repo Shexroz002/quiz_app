@@ -2,7 +2,6 @@ services:
   quiz-redis:
     image: redis:7-alpine
     container_name: quiz-redis
-    restart: always
     ports:
       - "6379:6379"
     volumes:
@@ -41,9 +40,8 @@ services:
   quiz_back:
     build:
       context: .
-      dockerfile: docker/prod/Dockerfile
+      dockerfile: docker/dev/Dockerfile
     container_name: quiz_back
-    restart: always
     ports:
       - "8000:8000"
     env_file:
@@ -53,26 +51,23 @@ services:
         condition: service_healthy
       quiz-redis:
         condition: service_started
-    command: >
-      gunicorn app.main:app
-      -k uvicorn.workers.UvicornWorker
-      --workers 2
-      --bind 0.0.0.0:8000
-      --timeout 120
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - quiz-network
-
   quiz_celery:
     build:
       context: .
-      dockerfile: docker/prod/Dockerfile
+      dockerfile: docker/dev/Dockerfile
     container_name: quiz_celery
-    restart: always
     env_file:
       - .env
     depends_on:
       quiz-db:
         condition: service_healthy
+    volumes:
+      - .:/app
     command: >
       celery -A app.core.celery_app worker
       --loglevel=info
