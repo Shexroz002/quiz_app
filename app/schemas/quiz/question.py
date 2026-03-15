@@ -1,9 +1,9 @@
 from app.schemas.quiz.options import OptionBase, OptionWithoutCorrect
 from pydantic import BaseModel, field_serializer
 from typing import Optional, List
-from app.core import config
+from app.core.config import settings
 
-BASE_URL = config.BASE_URL
+BASE_URL = settings.BASE_URL
 class QuestionImageBase(BaseModel):
     id: int
     image_url: str= None
