@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_MODEL: str = "deepseek-chat"
+    BASE_URL: str = "https://api.myedunova.uz"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
