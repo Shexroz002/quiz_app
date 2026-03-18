@@ -79,7 +79,9 @@ async def save_quiz_from_json(
         await db.flush()
 
         pdf_server = PDFService()
-        pdf_images = await pdf_server.extract_images(pdf_path)
+        pdf_images={}
+        if pdf_path:
+            pdf_images = await pdf_server.extract_images(pdf_path)
 
         question_count = 0
 

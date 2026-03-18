@@ -133,3 +133,103 @@ QUIZ_SCHEMA = {
     },
     "required": ["quiz_title", "subject", "description", "questions"]
 }
+
+
+
+def ai_generator_by_description(subject: str, description: str, question_count: int) -> str:
+    text_prompt = f"""
+    You are an AI system that generates structured academic test questions from user input.
+
+    TASK:
+    Generate a quiz based on:
+    - selected subject
+    - user-written description
+    - requested number of questions
+    - selected difficulty
+
+    INPUTS:
+    - SUBJECT: {subject}
+    - QUESTION_COUNT: {question_count}
+    - DESCRIPTION: {description}
+
+    STRICT OUTPUT RULES (VERY IMPORTANT):
+    1. Output MUST be valid JSON only.
+    2. Do NOT include explanations, comments, markdown, or extra text outside JSON.
+    3. Do NOT wrap JSON inside code blocks.
+    4. The response must start with `{{` and end with `}}`.
+    5. Follow the JSON schema EXACTLY. Do not add or remove fields.
+    6. Generate exactly {question_count} questions.
+
+    LANGUAGE RULES (VERY STRICT):
+    1. ALL output text MUST be written ONLY in Uzbek language.
+    2. DO NOT use English or any other language in ANY field.
+    3. This includes:
+       - title
+       - description
+       - question_text
+       - options.text
+       - answer_explain
+       - meta fields (difficulty, topic, subject)
+    4. Even short labels, explanations, and descriptions MUST be in Uzbek.
+    5. If SUBJECT is given in Uzbek, DO NOT translate it.
+
+    DIFFICULTY DISTRIBUTION RULES:
+    1. You MUST strictly follow difficulty distribution:
+
+       IF counts are provided:
+       - Generate exactly EASY_COUNT easy questions
+       - Generate exactly MEDIUM_COUNT medium questions
+       - Generate exactly HARD_COUNT hard questions
+
+       IF percentages are provided:
+       - Calculate counts based on QUESTION_COUNT
+       - Distribute questions accordingly
+       - Ensure total equals QUESTION_COUNT
+
+    2. Difficulty levels must be:
+       - "oson"
+       - "o‘rta"
+       - "qiyin"
+
+    3. Assign difficulty per question inside `meta.difficulty`.
+
+    4. Difficulty meaning:
+       - oson → oddiy tushunish darajasi, to‘g‘ridan-to‘g‘ri savollar
+       - o‘rta → biroz fikrlash, formuladan foydalanish
+       - qiyin → murakkab tahlil, bir nechta bosqichli yechim
+
+    CONTENT RULES:
+    1. All questions must belong to the given SUBJECT.
+    2. All questions must match the DESCRIPTION.
+    3. All questions must match the selected DIFFICULTY.
+    4. Avoid duplicate and near-duplicate questions.
+    5. Each question must have exactly 4 options.
+    6. Only one option must have `"is_correct": true`.
+    7. Incorrect options must be realistic and educational.
+
+    FORMULA RULES:
+    1. ALL mathematical, physics, and chemistry formulas MUST be written in LaTeX format.
+    2. All LaTeX backslashes MUST be escaped for JSON.
+    3. Wrap formulas in question text with `$...$`.
+    4. Wrap formulas in explanations with `\\( ... \\)`.
+    5. Use LaTeX only when necessary.
+
+    STRUCTURE RULES:
+    1. Each question MUST have unique incremental numeric `id`, starting from 1.
+    2. `meta` must contain:
+       - difficulty
+       - topic
+       - subject
+    3. `meta` values must be written in Uzbek language.
+    4. Use SUBJECT exactly as provided.
+
+    FINAL INSTRUCTIONS:
+    - Use SUBJECT as fixed input.
+    - Use DIFFICULTY as fixed input.
+    - Use DESCRIPTION to determine topic coverage, style, and scope.
+    - Generate exactly {question_count} questions.
+    - Return valid JSON only.
+    - Ensure ALL textual content is strictly in Uzbek language.
+    """
+
+    return text_prompt

@@ -13,6 +13,8 @@ celery_app.conf.update(
 celery_app.conf.task_queues = (
     Queue("celery"),
     Queue("pdf_ai_queue"),
+    Queue("ai_test_generator"),
+
 )
 celery_app.conf.update(
     task_serializer="json",

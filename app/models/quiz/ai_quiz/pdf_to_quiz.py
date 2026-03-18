@@ -1,7 +1,7 @@
 import enum
 import uuid
 from sqlalchemy import String, Integer, Text, ForeignKey, Enum
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 
@@ -20,8 +20,12 @@ class PDFJob(BaseModel):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
-    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=True)
+
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    subject: Mapped[int | None] = mapped_column(ForeignKey("subjects.id"), nullable=True)
+    number_questions: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     status: Mapped[PDFJobStatus] = mapped_column(
         Enum(PDFJobStatus),
@@ -35,6 +39,7 @@ class PDFJob(BaseModel):
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     quiz_id: Mapped[int | None] = mapped_column(ForeignKey("quizzes.id"), nullable=True)
-    question_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    subject_rel = relationship("Subject")

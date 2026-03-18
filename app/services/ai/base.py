@@ -28,3 +28,11 @@ class AIProvider(Protocol):
         progress: Optional[ProgressCb] = None,
     ) -> AIQuizParseResult:
         ...
+
+    async def generate_quiz_from_description(
+        self,
+        req: AIQuizParseRequest,
+        progress: Optional[ProgressCb] = None,
+        timeout_sec: int = 120,
+    ) -> AIQuizParseResult:
+        ...

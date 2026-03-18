@@ -1,1 +1,1 @@
-from .quiz_tasks import process_pdf_task
+from .quiz_tasks import process_pdf_task,generate_quiz_from_description_task

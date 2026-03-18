@@ -53,7 +53,7 @@ class GeminiProvider(AIProvider):
 
         try:
             if progress:
-                await progress(15, "PDF AI serverga yuklanmoqda","")
+                await progress(15, "PDF AI serverga yuklanmoqda", "")
 
             with open(pdf_path, "rb") as f:
                 uploaded_file = self.client.files.upload(
@@ -64,7 +64,7 @@ class GeminiProvider(AIProvider):
             uploaded_file_name = getattr(uploaded_file, "name", None)
 
             if progress:
-                await progress(25, "PDF qayta ishlashga yuborildi","")
+                await progress(25, "PDF qayta ishlashga yuborildi", "")
 
             uploaded_file = await self._wait_until_ready(
                 uploaded_file_name,
@@ -81,12 +81,12 @@ class GeminiProvider(AIProvider):
                 try:
                     if progress:
                         if attempt == 1:
-                            await progress(55, "AI savollar yaratmoqda","")
+                            await progress(55, "AI savollar yaratmoqda", "")
                         else:
                             await progress(
                                 min(55 + attempt * 5, 75),
                                 f"Qayta urinilmoqda ({attempt}/{max_retries})",
-                            "")
+                                "")
 
                     response = self.client.models.generate_content(
                         model=self.model,
@@ -105,7 +105,7 @@ class GeminiProvider(AIProvider):
                     data = json.loads(raw_text)
 
                     if progress:
-                        await progress(80, "AI javobi olindi","")
+                        await progress(80, "AI javobi olindi", "")
 
                     return AIQuizParseResult(
                         data=data,
@@ -172,3 +172,43 @@ class GeminiProvider(AIProvider):
                         e,
                         exc_info=True,
                     )
+
+    async def generate_quiz_from_description(
+            self,
+            req: AIQuizParseRequest,
+            progress: Optional[ProgressCb] = None,
+            timeout_sec: int = 120,
+    ) -> AIQuizParseResult:
+        if progress:
+            await progress(50, "Sizing so'rovingiz AIga jo'natilmoqda", "")
+
+        if progress:
+            await progress(65, "AI savollar yaratmoqda...", "")
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=[
+                types.Part.from_text(text=req.prompt)
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=req.schema,
+                temperature=0.1,
+            ),
+        )
+        raw_text = getattr(response, "text", None)
+        try:
+            if progress:
+                await progress(75, "AIdan testlar olindi.", "")
+            data = json.loads(raw_text)
+
+            if progress:
+                await progress(80, "AI javobi olindi", "")
+
+            return AIQuizParseResult(
+                data=data,
+                raw_text=raw_text,
+                provider=self.name,
+                model=self.model,
+            )
+        except Exception as e:
+            raise ValueError(f"AI javobini qayta ishlashda xatolik: {str(e)}\nRaw response: {response.text}") from e

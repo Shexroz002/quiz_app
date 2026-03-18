@@ -41,11 +41,36 @@ class AIQuizParser:
         res = await self.provider.parse_quiz_from_pdf(req, progress=progress)
 
         if progress:
-            await progress(85, "AI javobi JSON formatga o‘tkazilmoqda","")
+            await progress(85, "AI javobi JSON formatga o‘tkazilmoqda", "")
 
         if isinstance(res.data, dict) and res.data:
             return res.data
 
         raw = res.data or {}
 
+        return raw
+
+    async def quiz_generate_by_description(
+            self,
+            *,
+            progress: Optional[ProgressCb] = None,
+            timeout_sec: int = 120,
+    ):
+        if progress:
+            await progress(5, f"AI provider tayyorlanmoqda!", "")
+        req = AIQuizParseRequest(
+            pdf_path="",
+            prompt=self.prompt,
+            schema=self.schema,
+            timeout_sec=timeout_sec,
+        )
+
+        res = await self.provider.generate_quiz_from_description(req, progress=progress)
+        if progress:
+            await progress(85, "AI javobi JSON formatga o‘tkazilmoqda", "")
+
+        data = getattr(res, "data", None)
+        if data and isinstance(data, dict):
+            return data
+        raw = data.data or {}
         return raw

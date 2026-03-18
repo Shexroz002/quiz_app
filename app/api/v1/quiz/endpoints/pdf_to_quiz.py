@@ -35,11 +35,40 @@ async def create_pdf_job(
     }
 
 
+@pdf_to_quiz_router.post("/quiz/generate")
+async def generate_quiz_from_description(
+        subject:int,
+        description: str,
+        question_count: int,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+):
+    storage = StorageService(
+        upload_dir=settings.UPLOAD_DIR,
+        max_size_bytes=settings.MAX_PDF_SIZE,
+    )
+    service = PDFJobService(db=db, storage=storage)
+    job = await service.create_job_by_description(
+        subject=subject,
+        description=description,
+        question_count=question_count,
+        user_id=current_user.id,
+    )
+
+    return {
+        "job_id": str(job.id),
+        "status": job.status.value,
+        "progress": job.progress,
+        "message": job.message,
+        "task_id": job.celery_task_id
+    }
+
+
 @pdf_to_quiz_router.get("/jobs/{job_id}")
 async def get_pdf_job_status(
-    job_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+        job_id: str,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
 ):
     job = await db.get(PDFJob, job_id)
     if not job or job.user_id != current_user.id:

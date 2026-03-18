@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.quiz.ai_quiz.pdf_to_quiz import PDFJob, PDFJobStatus
 from app.repositories.quiz.pdf_job_repo import PDFJobRepository
 from app.services.pdf.storage_service import StorageService
-from app.services.pdf.tasks import process_pdf_task
+from app.services.pdf.tasks import process_pdf_task, generate_quiz_from_description_task
 
 
 class PDFJobService:
@@ -26,7 +26,6 @@ class PDFJobService:
         if file.content_type not in ("application/pdf", "application/octet-stream"):
             raise HTTPException(400, "Noto‘g‘ri fayl turi, faqat PDF qabul qilinadi")
 
-
         job_id = uuid.uuid4()
         file_path = os.path.join(self.storage.upload_dir, f"{job_id}.pdf")
 
@@ -44,6 +43,26 @@ class PDFJobService:
         job_new = await self.repo.create(job)
 
         task = process_pdf_task.delay(str(job.id))
+        await self.repo.set_task_id(job, task.id)
+
+        return job_new
+
+    async def create_job_by_description(self, subject: int, description: str, question_count: int,
+                                        user_id: int) -> PDFJob:
+        job_id = uuid.uuid4()
+        job = PDFJob(
+            id=job_id,
+            user_id=user_id,
+            subject=subject,
+            description=description,
+            number_questions=question_count,
+            status=PDFJobStatus.QUEUED,
+            progress=0,
+            message="So'rovingiz ko'rib chiqilmoqda...",
+        )
+        job_new = await self.repo.create(job)
+
+        task = generate_quiz_from_description_task.delay(str(job.id))
         await self.repo.set_task_id(job, task.id)
 
         return job_new
