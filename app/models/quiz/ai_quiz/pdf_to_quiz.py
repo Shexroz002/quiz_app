@@ -27,6 +27,8 @@ class PDFJob(BaseModel):
     subject: Mapped[int | None] = mapped_column(ForeignKey("subjects.id"), nullable=True)
     number_questions: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    question_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     status: Mapped[PDFJobStatus] = mapped_column(
         Enum(PDFJobStatus),
         default=PDFJobStatus.QUEUED,

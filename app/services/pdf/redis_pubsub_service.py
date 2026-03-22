@@ -37,7 +37,7 @@ async def update_job_status(
     job.progress = progress
     job.message = message
     job.quiz_id = quiz_id
-    job.number_questions = question_count
+    job.question_count = question_count
     job.error = error
 
     await db.commit()
