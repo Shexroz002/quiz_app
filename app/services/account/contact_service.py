@@ -2,6 +2,7 @@ from fastapi import HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from app.api.v1.teacher.my_student.params.student_filter import StudentFilterParams
 from app.core.database.base import get_db
 from app.repositories.account import ContactRepository, UserRepository
 
@@ -39,6 +40,9 @@ class ContactService:
 
     async def contact_suggestions(self, contact_user_id: int):
         return await self.repo.contact_suggestions(contact_user_id)
+
+    async def get_my_students(self, teacher_id: int,filters: StudentFilterParams):
+        return await self.repo.my_student_list(teacher_id,filters)
 
 
 

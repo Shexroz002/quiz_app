@@ -1,3 +1,5 @@
+from datetime import datetime
+from enum import Enum
 from typing import Annotated
 
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_serializer
@@ -84,3 +86,49 @@ class UserDetailPatchSchema(BaseModel):
     school_name: str | None = None
     education_level: EducationLevel | None = None
     subject_ids: list[int] | None = None
+
+
+class StudentStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+
+class StudentTableItemSchema(BaseModel):
+    student_id: int
+    username: str
+    full_name: str = Field(
+        default="Toshmatov Diyorbek",
+        description="O'quvchi F.I.Sh"
+    )
+
+    class_name: str = Field(
+        default="1A maxsus",
+        description="Sinf nomi"
+    )
+
+    average_score: float = Field(
+        default=67,
+        ge=0,
+        le=100,
+        description="O'rtacha ball"
+    )
+
+    tests_count: int = Field(
+        default=12,
+        ge=0,
+        description="Ishlagan testlar soni"
+    )
+
+    last_activity: datetime = Field(
+        default_factory=datetime.now,
+        description="So'nggi faoliyat vaqti"
+    )
+
+    status: StudentStatus = Field(
+        default=StudentStatus.ACTIVE,
+        description="O'quvchi holati"
+    )
