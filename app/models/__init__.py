@@ -10,3 +10,4 @@ from app.models.science.school_subject import Subject
 from app.models.account.user_subject import UserSubject
 from app.models.account.contact import Contact
 from app.models.notification import Notification, NotificationType, NotificationActionType
+from app.models.group.student_group import StudentGroup, StudentGroupMember

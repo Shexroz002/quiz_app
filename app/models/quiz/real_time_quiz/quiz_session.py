@@ -29,6 +29,11 @@ class QuizSession(BaseModel):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     quiz = relationship("Quiz", back_populates="sessions")
+    session_groups: Mapped[list["QuizSessionGroup"]] = relationship(
+        "QuizSessionGroup",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     participants = relationship(
         "SessionParticipant",

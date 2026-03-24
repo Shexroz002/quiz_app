@@ -37,7 +37,7 @@ class ContactRepository(BaseRepository[Contact]):
         contact_ids = {contact.friend_id for contact in contacts}
         stmt = select(User).where(~User.id.in_(contact_ids.union({contact_user_id}))).limit(10)
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return paginate(result.scalars().all())
 
     async def get_contact_by_id(self, friend_id: int, contact_user_id: int) -> Contact:
         stmt = select(Contact).where(Contact.user_id == contact_user_id, Contact.friend_id == friend_id)
@@ -99,6 +99,7 @@ class ContactRepository(BaseRepository[Contact]):
             select(
                 User.id.label("student_id"),
                 User.username.label("username"),
+                User.profile_image.label("profile_image"),
                 full_name_expr,
                 func.coalesce(
                     cast(User.education_level, String),

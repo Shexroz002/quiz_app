@@ -1,3 +1,4 @@
+from fastapi_pagination import paginate
 from sqlalchemy import select, case, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -76,17 +77,7 @@ class UserRepository(BaseRepository[User]):
 
         result = await self.db.execute(stmt)
 
-        return [
-            {
-                "id": r.id,
-                "username": r.username,
-                "first_name": r.first_name,
-                "last_name": r.last_name,
-                "profile_image": r.profile_image,
-                "contact_available": r.contact_available
-            }
-            for r in result
-        ]
+        return paginate(result.mappings().all())
 
     async def user_full_information(self, user_id: int):
         stmt = (

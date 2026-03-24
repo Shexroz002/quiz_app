@@ -4,7 +4,6 @@ from sqlalchemy import Column, String, Boolean, DateTime, Enum as SqlEnum
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.models.base import BaseModel
 
-
 class UserType(enum.Enum):
     student = "student"
     schoolboy = "schoolboy"
@@ -74,6 +73,17 @@ class User(BaseModel):
     subjects = relationship("UserSubject", back_populates="user")
     contacts = relationship("Contact", back_populates="friend", foreign_keys="Contact.friend_id")
     contact_of = relationship("Contact", back_populates="friend", foreign_keys="Contact.user_id")
+    created_groups: Mapped[list["StudentGroup"]] = relationship(
+        "StudentGroup",
+        back_populates="teacher",
+        foreign_keys="StudentGroup.teacher_id",
+    )
+
+    student_group_links: Mapped[list["StudentGroupMember"]] = relationship(
+        "StudentGroupMember",
+        back_populates="student",
+        foreign_keys="StudentGroupMember.student_id",
+    )
 
     def __str__(self):
         return f"<User(username={self.username})>"

@@ -9,6 +9,7 @@ from app.core.database.base import Base
 
 from app.models.account import *
 from app.models.quiz import *
+from app.models.group.student_group import *
 config = context.config
 
 # Interpret the config file for Python logging.

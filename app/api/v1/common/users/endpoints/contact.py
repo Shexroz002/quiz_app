@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi_pagination import Page
 from starlette import status
 from fastapi.responses import JSONResponse
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
@@ -21,7 +22,7 @@ async def contact_list(contact_service: ContactService = Depends(get_contact_ser
                        current_user: User = Depends(get_current_user)):
     return await contact_service.contact_list(current_user.id)
 
-@contact_router.get("/suggestions/", response_model=list[UserShortInfoSchema])
+@contact_router.get("/suggestions/", response_model=Page[UserShortInfoSchema])
 async def contact_suggestions(contact_service: ContactService = Depends(get_contact_service),
                        current_user: User = Depends(get_current_user)):
     return await contact_service.contact_suggestions(current_user.id)

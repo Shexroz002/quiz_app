@@ -69,6 +69,7 @@ class UserSubjectSchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class UserDetailInfoSchema(UserShortInfoSchema):
     email: EmailStr | None
     phone_number: str | None
@@ -77,6 +78,7 @@ class UserDetailInfoSchema(UserShortInfoSchema):
     subjects: list[UserSubjectSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class UserDetailPatchSchema(BaseModel):
     first_name: str | None = None
@@ -100,6 +102,7 @@ from pydantic import BaseModel, Field
 class StudentTableItemSchema(BaseModel):
     student_id: int
     username: str
+    profile_image: str | None = None
     full_name: str = Field(
         default="Toshmatov Diyorbek",
         description="O'quvchi F.I.Sh"
@@ -123,7 +126,7 @@ class StudentTableItemSchema(BaseModel):
         description="Ishlagan testlar soni"
     )
 
-    last_activity: datetime = Field(
+    last_activity: datetime | None = Field(
         default_factory=datetime.now,
         description="So'nggi faoliyat vaqti"
     )
@@ -132,3 +135,11 @@ class StudentTableItemSchema(BaseModel):
         default=StudentStatus.ACTIVE,
         description="O'quvchi holati"
     )
+
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str):
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
