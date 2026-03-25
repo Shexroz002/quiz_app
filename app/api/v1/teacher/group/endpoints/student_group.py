@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Query
+from fastapi_pagination import Page
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models.group.student_group import GroupColor
@@ -97,7 +98,7 @@ async def remove_members(
     return {"detail": "Members removed successfully"}
 
 
-@student_group_router.get("/", response_model=list[StudentGroupCardSchema])
+@student_group_router.get("/", response_model=Page[StudentGroupCardSchema])
 async def list_groups(
         search: str | None = Query(None, description="Search  by group name"),
         subject_id: int | None = Query(None, description="Filter by subject ID"),

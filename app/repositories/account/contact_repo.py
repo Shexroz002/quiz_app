@@ -32,10 +32,23 @@ class ContactRepository(BaseRepository[Contact]):
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def contact_suggestions(self, contact_user_id: int) -> Sequence[User]:
+    async def contact_suggestions(self, contact_user_id: int, search: str) -> Sequence[User]:
         contacts = await self.contact_list(contact_user_id)
         contact_ids = {contact.friend_id for contact in contacts}
-        stmt = select(User).where(~User.id.in_(contact_ids.union({contact_user_id}))).limit(10)
+        stmt = select(User).where(~User.id.in_(contact_ids.union({contact_user_id})))
+        if search:
+            search_term = f"%{search}%"
+
+            stmt = stmt.where(
+                or_(
+                    User.username.ilike(search_term),
+                    User.first_name.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                    func.concat(User.first_name, " ", User.last_name).ilike(search_term)
+                )
+            )
+
+        stmt = stmt.limit(10)
         result = await self.db.execute(stmt)
         return paginate(result.scalars().all())
 

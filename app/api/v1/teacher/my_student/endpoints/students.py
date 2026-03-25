@@ -24,9 +24,12 @@ async def my_students(
 
 
 @my_student_router.get("/suggestions/", response_model=Page[UserShortInfoSchema])
-async def contact_suggestions(contact_service: ContactService = Depends(get_contact_service),
-                       current_user: User = Depends(get_current_user)):
-    return await contact_service.contact_suggestions(current_user.id)
+async def contact_suggestions(
+        search: str = None,
+        contact_service: ContactService = Depends(get_contact_service),
+        current_user: User = Depends(get_current_user)):
+    return await contact_service.contact_suggestions(current_user.id,search)
+
 
 @my_student_router.get("/search", response_model=Page[UserContactListSchema])
 async def search_users(
@@ -35,6 +38,7 @@ async def search_users(
         current_user: User = Depends(get_current_user),
 ):
     return await user_service.search_users_for_contact(current_user_id=current_user.id, search=search)
+
 
 @my_student_router.post("/create/{student_id}", status_code=status.HTTP_201_CREATED)
 async def create_contact(student_id: int, contact_service: ContactService = Depends(get_contact_service),

@@ -38,8 +38,8 @@ class ContactService:
         return await self.repo.contact_list(contact_user_id)
 
 
-    async def contact_suggestions(self, contact_user_id: int):
-        return await self.repo.contact_suggestions(contact_user_id)
+    async def contact_suggestions(self, contact_user_id: int,search:str):
+        return await self.repo.contact_suggestions(contact_user_id,search)
 
     async def get_my_students(self, teacher_id: int,filters: StudentFilterParams):
         return await self.repo.my_student_list(teacher_id,filters)

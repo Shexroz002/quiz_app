@@ -1,3 +1,4 @@
+from fastapi_pagination import paginate
 from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -165,4 +166,4 @@ class StudentGroupRepository:
 
         result = await self.db.execute(stmt)
         rows = result.mappings().all()
-        return rows
+        return paginate(rows)

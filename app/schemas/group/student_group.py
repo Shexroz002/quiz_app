@@ -65,6 +65,15 @@ class StudentGroupCardSchema(BaseModel):
     color: str | None = None
     cover_image: str | None = None
 
+    @field_serializer("cover_image")
+    def add_base_url(self, value: str):
+        print("valsue", type(value))
+        if value is None or value == "":
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
+
 
 class StudentGroupDetailSchema(StudentGroupResponseSchema):
     members: list[StudentGroupMemberShortSchema] = []
