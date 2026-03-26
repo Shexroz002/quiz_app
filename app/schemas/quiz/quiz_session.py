@@ -2,15 +2,43 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer, Field
 
+from app.models.quiz.real_time_quiz.quiz_session import SessionType
 from app.schemas.quiz.question import QuestionDetail, QuestionDetailWithoutCorrect, QuestionImageBase, BASE_URL
 
 
 class QuizSessionCreate(BaseModel):
     quiz_id: int
     duration_minutes: int
-    max_participants: int
+    max_participants: int | None = Field(default=None,
+                                         description="Maximum number of participants for public sessions."
+                                                     " Must be greater than 0 when session_type is 'public'.")
+
+
+class GroupQuizSessionCreate(QuizSessionCreate):
+    group_ids: List[int] | None = Field(default=None, description="List of group IDs to invite to the session")
+    session_type: SessionType
+
+    @field_serializer("group_ids")
+    def validate_group_ids(self, value, values):
+        session_type = values.get("session_type")
+        if session_type == SessionType.group and not value:
+            raise ValueError("group_ids must not be empty when session_type is 'group'")
+        return value
+
+    @field_serializer("max_participants")
+    def validate_max_participants(self, value, values):
+        session_type = values.get("session_type")
+        if session_type == SessionType.public and value <= 0:
+            raise ValueError("max_participants must be greater than 0 when session_type is 'public'")
+        return value
+
+    @field_serializer("duration_minutes")
+    def validate_duration_minutes(self, value, values):
+        if value <= 0:
+            raise ValueError("duration_minutes must be greater than 0 when session_type is 'public'")
+        return value
 
 
 class JoinSessionRequest(BaseModel):
@@ -22,6 +50,8 @@ class QuizSessionResponse(BaseModel):
 
     session_id: int
     quiz_id: int
+    quiz_name: str | None = None
+    subject_name: str | None = None
     host_id: int
     join_code: str
     status: str

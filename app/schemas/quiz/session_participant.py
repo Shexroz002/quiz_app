@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_serializer
-
+from datetime import datetime
 
 class SessionParticipantCreate(BaseModel):
     user_id: int
@@ -14,6 +14,7 @@ class SessionParticipantList(BaseModel):
     profile_image: str | None
     is_host: bool
     first_name: str | None
+    joined_at: datetime| None = None
     last_name: str | None
     participant_status: str | None
     user_id:int

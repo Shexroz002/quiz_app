@@ -67,7 +67,6 @@ class StudentGroupCardSchema(BaseModel):
 
     @field_serializer("cover_image")
     def add_base_url(self, value: str):
-        print("valsue", type(value))
         if value is None or value == "":
             return value
         if value.startswith("http"):
@@ -84,6 +83,29 @@ class GroupCoverImageResponseSchema(BaseModel):
 
     @field_serializer("cover_image")
     def add_base_url(self, value: str):
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
+
+
+from datetime import date
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+
+class GroupMemberTableItemSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    student_id: int
+    full_name: str = Field(..., description="O'quvchi F.I.Sh")
+    profile_image: str | None = Field(default=None, description="Profil rasmi")
+    gender: str | None = Field(default=None, description="Jinsi")
+    phone_number: str | None = Field(default=None, description="Telefon raqami")
+    birth_date: date | None = Field(default=None, description="Tug'ilgan sana")
+
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str | None):
         if value is None:
             return value
         if value.startswith("http"):

@@ -1,3 +1,4 @@
+from fastapi_pagination import paginate
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,13 +16,13 @@ class SessionParticipantRepository:
         await self.db.flush()
         return participant
 
-    async def is_participant(self, session_id: int, user_id: int) -> bool:
+    async def is_participant(self, session_id: int, user_id: int):
         stmt = select(SessionParticipant.id).where(
             SessionParticipant.session_id == session_id,
             SessionParticipant.user_id == user_id,
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none() is not None
+        return result.scalar_one_or_none()
 
     async def get_by_session_user(self, session_id: int, user_id: int) -> SessionParticipant | None:
         stmt = select(SessionParticipant).where(
@@ -44,6 +45,7 @@ class SessionParticipantRepository:
                 User.last_name,
                 User.id.label("user_id"),
                 SessionParticipant.nickname,
+                SessionParticipant.joined_at,
                 User.profile_image,
                 SessionParticipant.is_host,
                 SessionParticipant.participant_status
@@ -52,7 +54,7 @@ class SessionParticipantRepository:
             .where(SessionParticipant.session_id == session_id)
         )
         result = await self.db.execute(stmt)
-        return result.mappings().all()
+        return paginate(result.mappings().all())
 
     async def disconnect_participant(self, participant_id: int) -> SessionParticipant | None:
         stmt = (

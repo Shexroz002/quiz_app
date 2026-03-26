@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from fastapi_pagination import paginate
 from sqlalchemy import select, and_, text, or_, cast, Numeric
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -116,7 +117,7 @@ class QuizRepository:
             .order_by(Quiz.created_at.desc())
         )
         result = await self.db.execute(stmt)
-        return result.mappings().all()
+        return paginate(result.mappings().all())
 
     async def detail(self, user_id, quiz_id):
 

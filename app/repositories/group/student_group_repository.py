@@ -1,9 +1,9 @@
 from fastapi_pagination import paginate
-from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case
+from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Subject, SessionParticipant, QuizAttempt, QuizSession
+from app.models import Subject, SessionParticipant, QuizAttempt, QuizSession, User
 from app.models.group.student_group import StudentGroup, StudentGroupMember
 from app.models.quiz.real_time_quiz import QuizSessionGroup
 
@@ -37,6 +37,22 @@ class StudentGroupRepository:
                 )
             )
 
+
+    async def validate_groups(self, teacher_id: int, group_ids: list[int]) -> list[int]:
+        if not group_ids:
+            return []
+
+        stmt = (
+            select(StudentGroup.id)
+            .where(
+                StudentGroup.teacher_id == teacher_id,
+                StudentGroup.id.in_(group_ids),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+
     async def remove_members(self, group_id: int, student_ids: list[int]):
         stmt = (
             delete(StudentGroupMember)
@@ -47,6 +63,46 @@ class StudentGroupRepository:
         )
         await self.db.execute(stmt)
 
+
+    async def group_members(
+            self,
+            group_id: int,
+            search: str | None = None,
+    ):
+        full_name_expr = func.concat(
+            User.first_name, " ", User.last_name
+        ).label("full_name")
+
+        stmt = (
+            select(
+                User.id.label("student_id"),
+                full_name_expr,
+                User.profile_image.label("profile_image"),
+                User.gender.label("gender"),
+                User.phone_number.label("phone_number"),
+                User.date_of_birth.label("birth_date"),
+            )
+            .select_from(StudentGroupMember)
+            .join(User, User.id == StudentGroupMember.student_id)
+            .where(StudentGroupMember.group_id == group_id)
+        )
+
+        if search:
+            search_value = f"%{search.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    User.first_name.ilike(search_value),
+                    User.last_name.ilike(search_value),
+                    full_name_expr.ilike(search_value),
+                )
+            )
+
+        stmt = stmt.order_by(User.first_name.asc(), User.last_name.asc())
+
+        result = await self.db.execute(stmt)
+        return paginate(result.mappings().all())
+
+
     async def is_group_member(self, group_id: int, student_id: int) -> bool:
         stmt = select(StudentGroupMember).where(
             StudentGroupMember.group_id == group_id,
@@ -54,6 +110,7 @@ class StudentGroupRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
+
 
     async def list_groups_by_teacher(self, teacher_id: int, search: str | None = None,
                                      subject_id: int | None = None, ):

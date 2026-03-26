@@ -34,18 +34,17 @@ class StudentGroupService:
         )
 
         group = await self.repo.create_group(group)
-
         if data.student_ids:
-            stmt = select(Contact.friend_id).where(
-                Contact.user_id == teacher_id,
-                Contact.friend_id.in_(data.student_ids),
-            )
-            result = await self.db.execute(stmt)
-            allowed_ids = set(result.scalars().all())
+            # stmt = select(Contact.friend_id).where(
+            #     Contact.user_id == teacher_id,
+            #     Contact.friend_id.in_(data.student_ids),
+            # )
+            # result = await self.db.execute(stmt)
+            # allowed_ids = set(result.scalars().all())
+            #
+            # valid_students = [sid for sid in data.student_ids if sid in allowed_ids]
 
-            valid_students = [sid for sid in data.student_ids if sid in allowed_ids]
-
-            await self.repo.add_members(group.id, valid_students, teacher_id)
+            await self.repo.add_members(group.id, data.student_ids, teacher_id)
 
         await self.db.commit()
         return group
@@ -81,6 +80,13 @@ class StudentGroupService:
         await self.repo.remove_members(group_id, student_ids)
         await self.db.commit()
         return group
+    async def group_members(self, group_id: int, teacher_id: int, search: str | None = None):
+        group = await self.repo.get_group(group_id)
+        if not group:
+            raise ValueError("Group not found")
+        if group.teacher_id != teacher_id:
+            raise ValueError("Permission denied")
+        return await self.repo.group_members(group_id, search)
 
     async def add_members(self, group_id: int, teacher_id: int, student_ids: list[int]):
         group = await self.repo.get_group(group_id)
@@ -129,7 +135,7 @@ class StudentGroupService:
         group.cover_image = None
         await self.db.commit()
 
-        return group
+        return None
 
 
 def get_student_group_service(db: AsyncSession = Depends(get_db)) -> StudentGroupService:

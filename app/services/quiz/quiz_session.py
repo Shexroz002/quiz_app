@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.models import User
+from app.models.quiz.real_time_quiz.quiz_group import QuizSessionGroup
+from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
 from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus
+from app.repositories.group.student_group_repository import StudentGroupRepository
 from app.repositories.quiz.question_repo import QuestionRepository
 from app.repositories.quiz.quiz_attempt_repo import QuizAttemptRepository
 from app.repositories.quiz.quiz_repo import QuizRepository
@@ -15,7 +18,7 @@ from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest
-from app.schemas.quiz.quiz_session import QuizSessionCreate
+from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
 from app.websocket import session_ws_manager
 
 
@@ -31,6 +34,7 @@ class QuizSessionService:
         self.question_repo = QuestionRepository(db)
         self.participant_repo = SessionParticipantRepository(db)
         self.attempt_repo = QuizAttemptRepository(db)
+        self.group_repo = StudentGroupRepository(db)
 
     async def _generate_unique_join_code(self) -> str:
         for _ in range(10):
@@ -113,7 +117,7 @@ class QuizSessionService:
 
         is_participant = await self.participant_repo.is_participant(quiz_session.id, user.id)
         if not is_participant:
-            await self.participant_repo.create(
+            is_participant = await self.participant_repo.create(
                 {
                     "session_id": quiz_session.id,
                     "nickname": user.username,
@@ -126,11 +130,14 @@ class QuizSessionService:
                 session_id=quiz_session.id,
                 event="participant_joined",
                 payload={
+                    "participant_id": is_participant.id,
                     "user_id": user.id,
-                    "username": user.username,
-                    "avatar_url": f"{BASE_URL}{user.profile_image}" if user.profile_image else None,
+                    "is_host": is_participant.is_host,
+                    "nickname": user.username,
+                    "profile_image": f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
                     "first_name": user.first_name,
                     "last_name": user.last_name,
+                    "joined_at": is_participant.joined_at.isoformat() if is_participant.joined_at else None,
                     "status": ParticipantStatus.PREPARING.value,
                     "participants_online": session_ws_manager.count(quiz_session.id)},
             )
@@ -395,6 +402,9 @@ class QuizSessionService:
             raise HTTPException(status_code=403, detail="User is not a participant of this session")
 
         quiz_session = await self.session_repo.get_single_player_session(session_id, status="running")
+        if quiz_session is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
         questions = await self.question_repo.list_quiz_session_questions(quiz_id=quiz_session.quiz_id)
         return {
             "session_id": quiz_session.id,
@@ -407,7 +417,7 @@ class QuizSessionService:
         }
 
     async def get_single_player_quiz_info(self, session_id: int, user_id: int, is_question=True, status="running"):
-        quiz_session = await self.session_repo.get_single_player_session(session_id, status=status)
+        quiz_session = await self.session_repo.get_single_player_session(session_id, host_id=None, status=status)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -415,6 +425,8 @@ class QuizSessionService:
         result = {
             "session_id": quiz_session.id,
             "quiz_id": quiz_session.quiz_id,
+            "quiz_name": quiz_session.quiz_name,
+            "subject_name": quiz_session.subject_name,
             "duration_minutes": quiz_session.duration_minutes,
             "join_code": quiz_session.join_code,
             "host_id": quiz_session.host_id,
@@ -496,6 +508,63 @@ class QuizSessionService:
                 "status": ParticipantStatus.DISCONNECTED.value,
             },
         )
+
+    async def groups_add_to_quiz(self, session_id: int, user_id: int, group_ids: list[int]):
+        quiz_session = await self.session_repo.get_for_host(session_id, user_id)
+        if quiz_session is None or quiz_session.status != 'waiting':
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        for group_id in group_ids:
+            self.db.add(
+                QuizSessionGroup(
+                    group_id=group_id,
+                    session_id=session_id
+                )
+            )
+
+    async def create_group_session(self, quiz_session_data: GroupQuizSessionCreate, user: User):
+        quiz = await self.quiz_repo.get(quiz_session_data.quiz_id, user.id)
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        join_code = await self._generate_unique_join_code()
+        quiz_session = await self.session_repo.create(
+            {
+                "quiz_id": quiz.id,
+                "max_participants": quiz_session_data.max_participants,
+                "duration_minutes": quiz_session_data.duration_minutes,
+                "host_id": user.id,
+                "join_code": join_code,
+                "status": SessionStatus.waiting
+            }
+        )
+
+        if quiz_session_data.session_type == SessionType.group and quiz_session_data.group_ids:
+            """
+             if group ids are provided, validate that the groups belong to the teacher and add them to the quiz session
+             if group ids are not provided, the quiz session will be open to all students of the teacher
+            """
+            validate_group_ids = self.group_repo.validate_groups(teacher_id=user.id,
+                                                                 group_ids=quiz_session_data.group_ids)
+            if validate_group_ids != quiz_session_data.group_ids:
+                raise HTTPException(status_code=400, detail="Group ids do not match")
+
+            await self.groups_add_to_quiz(session_id=quiz_session.id, user_id=user.id,
+                                          group_ids=quiz_session_data.group_ids)
+        await self.db.commit()
+        await self.db.refresh(quiz_session)
+        result = {
+            "session_id": quiz_session.id,
+            "quiz_id": quiz_session.quiz_id,
+            "host_id": quiz_session.host_id,
+            "join_code": quiz_session.join_code,
+            "status": quiz_session.status,
+            "duration_minutes": quiz_session.duration_minutes,
+            "questions_count": 30,  # TODO: get real question count for quiz
+            "started_at": quiz_session.started_at,
+            "finished_at": quiz_session.finished_at,
+        }
+        return result
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:

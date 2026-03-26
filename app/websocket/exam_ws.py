@@ -38,6 +38,13 @@ async def _change_participant(user_id: int, session_id: int) -> None:
         await db.execute(stm)
         await db.commit()
 
+async def _is_host_session(user_id: int, session_id: int) -> bool:
+    async with AsyncSessionLocal() as db:
+        session_repo = QuizSessionRepository(db)
+        session = await session_repo.get_by_id(session_id)
+        return session and session.host_id == user_id
+
+
 
 # WebSocket endpoint for quiz session participation and real-time updates
 
@@ -53,15 +60,16 @@ async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
         return
 
     await session_ws_manager.connect(websocket, session_id)
-    await _change_participant(user_id=user.id, session_id=session_id)
-    await session_ws_manager.broadcast(
-        session_id=session_id,
-        event="participant_read",
-        payload={
-            "user_id": user.id,
-            "status": "ready",
-        },
-    )
+    if not await _is_host_session(user_id=user.id, session_id=session_id):
+        await _change_participant(user_id=user.id, session_id=session_id)
+        await session_ws_manager.broadcast(
+            session_id=session_id,
+            event="participant_read",
+            payload={
+                "user_id": user.id,
+                "status": "ready",
+            },
+        )
 
     try:
         while True:

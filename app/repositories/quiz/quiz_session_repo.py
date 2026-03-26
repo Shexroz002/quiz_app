@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
-from sqlalchemy import func, cast, literal, JSON,and_
+from sqlalchemy import func, cast, literal, JSON, and_
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage,Quiz,User
+from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage, \
+    Quiz, User, Subject
+from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
 
 
 class QuizSessionRepository:
@@ -37,26 +39,43 @@ class QuizSessionRepository:
 
     async def start_session(self, quiz_session: QuizSession) -> QuizSession:
         now = datetime.now(UTC)
-        quiz_session.status = "running"
+        quiz_session.status = SessionStatus.running
         quiz_session.started_at = now
         quiz_session.finished_at = now + timedelta(minutes=quiz_session.duration_minutes)
         await self.db.flush()
         return quiz_session
 
-    async def get_single_player_session(self, session_id: int, host_id: int=None,status="running") -> QuizSession | None:
+    async def get_single_player_session(
+            self,
+            session_id: int,
+            host_id: int | None = None,
+            status=SessionStatus.running,
+    ):
+        stmt = (
+            select(
+                QuizSession.id,
+                QuizSession.status,
+                QuizSession.host_id,
+                QuizSession.duration_minutes,
+                QuizSession.join_code,
+                QuizSession.started_at,
+                QuizSession.finished_at,
+                Quiz.id.label("quiz_id"),
+                Quiz.title.label("quiz_name"),
+                Quiz.subject.label("subject_name"),
+            )
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSession.id == session_id,
+                QuizSession.status == status,
+            )
+        )
+
         if host_id:
-            stmt = select(QuizSession).where(
-                QuizSession.id == session_id,
-                QuizSession.host_id == host_id,
-                QuizSession.status == status,
-            )
-        else:
-            stmt = select(QuizSession).where(
-                QuizSession.id == session_id,
-                QuizSession.status == status,
-            )
+            stmt = stmt.where(QuizSession.host_id == host_id)
+
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.mappings().first()
 
     async def get_session_questions_with_answers(
             self,
@@ -156,7 +175,7 @@ class QuizSessionRepository:
         res = await self.db.execute(stmt)
         return res.mappings().all()
 
-    async def get_personal_quiz_session_history(self, user_id: int,search: str):
+    async def get_personal_quiz_session_history(self, user_id: int, search: str):
         base_cte = (
             select(
                 QuizSession.id.label("session_id"),
@@ -208,7 +227,7 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return result.mappings().all()
 
-    async def get_session_participant_rank_list(self, session_id: int,user_id:int):
+    async def get_session_participant_rank_list(self, session_id: int, user_id: int):
         stmt = (
             select(
                 SessionParticipant.user_id.label("user_id"),
@@ -234,7 +253,7 @@ class QuizSessionRepository:
                 ),
             )
             .where(QuizSession.id == session_id)
-            .order_by(QuizAttempt.score.desc(),  QuizAttempt.finished_at.asc())
+            .order_by(QuizAttempt.score.desc(), QuizAttempt.finished_at.asc())
         )
 
         result = await self.db.execute(stmt)

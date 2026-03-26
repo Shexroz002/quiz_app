@@ -1,11 +1,11 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, Query, Path
 from fastapi_pagination import Page
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models.group.student_group import GroupColor
 from app.schemas.group.student_group import StudentGroupResponseSchema, StudentGroupCreateSchema, \
-    StudentGroupUpdateSchema, StudentGroupCardSchema, GroupCoverImageResponseSchema
+    StudentGroupUpdateSchema, StudentGroupCardSchema, GroupCoverImageResponseSchema, GroupMemberTableItemSchema
 from app.services.group.student_group_service import get_student_group_service, StudentGroupService
 
 student_group_router = APIRouter(prefix="", )
@@ -58,6 +58,7 @@ async def upload_image(
     cover_image = await service.update_group_image(group_id, current_user.id, file)
     return GroupCoverImageResponseSchema(cover_image=cover_image)
 
+
 # Delete group image
 
 @student_group_router.delete("/{group_id}/remove/image", status_code=status.HTTP_204_NO_CONTENT)
@@ -96,6 +97,17 @@ async def remove_members(
 ):
     await service.remove_members(group_id, current_user.id, list(map(int, student_ids.split(","))))
     return {"detail": "Members removed successfully"}
+
+
+# group members
+@student_group_router.get("/{group_id}/members", response_model=Page[GroupMemberTableItemSchema])
+async def get_members(
+        group_id: int = Path(..., description="ID of the student group"),
+        search: str | None = Query(None, description="Search  by group name"),
+        current_user=Depends(get_current_user),
+        service: StudentGroupService = Depends(get_student_group_service),
+):
+    return await service.group_members(group_id, current_user.id, search)
 
 
 @student_group_router.get("/", response_model=Page[StudentGroupCardSchema])
