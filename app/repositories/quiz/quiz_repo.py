@@ -1,10 +1,11 @@
 from fastapi import HTTPException
 from fastapi_pagination import paginate
-from sqlalchemy import select, and_, text, or_, cast, Numeric
+from sqlalchemy import select, and_, text, or_, cast, Numeric, literal, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.functions import func
 
+from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
 from app.models import Quiz, Option, AttemptAnswer, QuizSession, SessionParticipant, QuizAttempt
 from app.models.quiz import Question
 
@@ -282,10 +283,7 @@ class QuizRepository:
         result = await self.db.execute(stmt)
         return result.mappings().all()
 
-    async def get_overall_statistic_cards(
-            self,
-            user_id: int,
-    ):
+    async def get_overall_statistic_cards(self, user_id: int):
         total_quiz_expr = func.count(func.distinct(SessionParticipant.session_id))
         correct_answer_expr = func.count(AttemptAnswer.question_id).filter(
             AttemptAnswer.is_correct.is_(True)
@@ -336,3 +334,176 @@ class QuizRepository:
 
         result = await self.db.execute(stmt)
         return result.mappings().first()
+
+    async def get_teacher_quizzes(self, user_id: int, filters: TeacherQuizListFilterSchema):
+        q_count_subquery = (
+            select(
+                Question.quiz_id.label("quiz_id"),
+                func.count(Question.id).label("question_count"),
+            )
+            .group_by(Question.quiz_id)
+            .subquery()
+        )
+
+        attempts_subquery = (
+            select(
+                QuizSession.quiz_id.label("quiz_id"),
+                func.count(QuizAttempt.id).label("attempts"),
+            )
+            .join(QuizAttempt, QuizAttempt.session_id == QuizSession.id)
+            .group_by(QuizSession.quiz_id)
+            .subquery()
+        )
+
+        avg_score_subq = (
+            select(
+                QuizSession.quiz_id.label("quiz_id"),
+                cast(
+                    func.avg(
+                        (QuizAttempt.score * literal(100.0)) /
+                        func.nullif(QuizAttempt.total_questions, 0)
+                    ),
+                    Numeric(10, 2)
+                ).label("average_score"),
+            )
+            .join(QuizAttempt, QuizAttempt.session_id == QuizSession.id)
+            .where(QuizAttempt.total_questions > 0)
+            .group_by(QuizSession.quiz_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Quiz.id,
+                Quiz.title,
+                Quiz.subject,
+                Quiz.quiz_generate_type,
+                Quiz.created_at,
+                func.coalesce(q_count_subquery.c.question_count, 0).label("question_count"),
+                func.coalesce(attempts_subquery.c.attempts, 0).label("attempts"),
+                cast(
+                    func.coalesce(avg_score_subq.c.average_score, 0),
+                    Numeric(10, 2)
+                ).label("average_score"),
+            )
+            .outerjoin(q_count_subquery, q_count_subquery.c.quiz_id == Quiz.id)
+            .outerjoin(attempts_subquery, attempts_subquery.c.quiz_id == Quiz.id)
+            .outerjoin(avg_score_subq, avg_score_subq.c.quiz_id == Quiz.id)
+            .where(Quiz.user_id == user_id)
+            .order_by(Quiz.created_at.desc())
+        )
+
+        if filters.search:
+            stmt = stmt.where(Quiz.title.ilike(f"%{filters.search.strip()}%"))
+
+        if filters.quiz_generate_type:
+            stmt = stmt.where(Quiz.quiz_generate_type == filters.quiz_generate_type)
+
+        result = await self.db.execute(stmt)
+        return paginate(result.mappings().all())
+
+    async def get_quiz_statistics(self, quiz_id: int):
+        percentage_expr = case(
+            (
+                QuizAttempt.total_questions > 0,
+                100.0 * QuizAttempt.score / QuizAttempt.total_questions,
+            ),
+            else_=None,
+        )
+
+        total_attempts_expr = func.count(QuizAttempt.id).label("total_attempts")
+
+        average_score_expr = func.coalesce(
+            func.round(
+                cast(
+                    func.avg(percentage_expr).filter(QuizAttempt.finished.is_(True)),
+                    Numeric(10, 2),
+                ),
+                2,
+            ),
+            0,
+        ).label("average_score")
+
+        completion_rate_expr = func.coalesce(
+            func.round(
+                cast(
+                    100.0
+                    * func.count(QuizAttempt.id).filter(QuizAttempt.finished.is_(True))
+                    / func.nullif(func.count(QuizAttempt.id), 0),
+                    Numeric(10, 2),
+                ),
+                2,
+            ),
+            0,
+        ).label("completion_rate")
+
+        success_rate_expr = func.coalesce(
+            func.round(
+                cast(
+                    100.0
+                    * func.count(QuizAttempt.id).filter(
+                        QuizAttempt.finished.is_(True),
+                        percentage_expr >= 60,
+                    )
+                    / func.nullif(
+                        func.count(QuizAttempt.id).filter(QuizAttempt.finished.is_(True)),
+                        0,
+                    ),
+                    Numeric(10, 2),
+                ),
+                2,
+            ),
+            0,
+        ).label("success_rate")
+
+        highest_score_expr = func.coalesce(
+            func.round(
+                cast(
+                    func.max(percentage_expr).filter(QuizAttempt.finished.is_(True)),
+                    Numeric(10, 2),
+                ),
+                2,
+            ),
+            0,
+        ).label("highest_score")
+
+        champions_count_expr = func.count(QuizAttempt.id).filter(
+            QuizAttempt.finished.is_(True),
+            percentage_expr >= 86,
+        ).label("champions_count")
+
+        stmt = (
+            select(
+                total_attempts_expr,
+                average_score_expr,
+                completion_rate_expr,
+                success_rate_expr,
+                highest_score_expr,
+                champions_count_expr,
+            )
+            .select_from(QuizSession)
+            .join(QuizAttempt, QuizAttempt.session_id == QuizSession.id)
+            .where(QuizSession.quiz_id == quiz_id)
+        )
+
+        result = await self.db.execute(stmt)
+        row = result.mappings().first()
+
+        if not row:
+            return {
+                "total_attempts": 0,
+                "average_score": 0.0,
+                "completion_rate": 0.0,
+                "success_rate": 0.0,
+                "highest_score": 0.0,
+                "champions_count": 0,
+            }
+
+        return {
+            "total_attempts": int(row["total_attempts"] or 0),
+            "average_score": float(row["average_score"] or 0),
+            "completion_rate": float(row["completion_rate"] or 0),
+            "success_rate": float(row["success_rate"] or 0),
+            "highest_score": float(row["highest_score"] or 0),
+            "champions_count": int(row["champions_count"] or 0),
+        }

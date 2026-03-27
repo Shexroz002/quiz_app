@@ -1,9 +1,25 @@
 import datetime
 from decimal import Decimal
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
-from app.schemas.quiz.question import QuestionBase, QuestionListSchema
 
+from app.models.quiz.quiz import QuizGenerateType
+from app.schemas.quiz.question import QuestionListSchema
+
+
+class TeacherQuizListItemSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str = Field(..., description="Test nomi")
+    subject: Optional[str] = Field(None, description="Fan nomi")
+    quiz_generate_type: QuizGenerateType = Field(..., description="Test turi")
+
+    question_count: int = Field(0, description="Savollar soni")
+    attempts: int = Field(0, description="Urinishlar soni")
+    average_score: Decimal = Field(0, description="O'rtacha ball")
+    created_at: datetime.datetime = Field(..., description="Yaratilgan sana")
 
 class QuizBase(BaseModel):
     id: int
@@ -28,7 +44,52 @@ class QuizDetailSchema(QuizBase):
 
 class QuizUpdateSchema(BaseModel):
     title: str
+    quiz_generate_type: QuizGenerateType = Field(..., description="Test turi")
+    subject: Optional[str] = Field(None, description="Fan nomi")
+    description: Optional[str] = Field(None, description="Test tavsifi")
+class QuizStatisticsSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
+    total_attempts: int = Field(
+        default=0,
+        ge=0,
+        description="Jami urinishlar soni",
+        examples=[48],
+    )
+    average_score: float = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="O'rtacha ball foizda",
+        examples=[69.0],
+    )
+    completion_rate: float = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Bajarilish darajasi foizda",
+        examples=[69.0],
+    )
+    success_rate: float = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Muvaffaqiyat foizda",
+        examples=[55.0],
+    )
+    highest_score: float = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Eng yuqori ball foizda",
+        examples=[91.0],
+    )
+    champions_count: int = Field(
+        default=0,
+        ge=0,
+        description="A'lochilar soni",
+        examples=[7],
+    )
 
 class TopicStatisticResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
 from app.core.database.base import get_db
 from app.models.quiz import Quiz, Question, Option, QuestionImage
 from app.repositories.quiz.quiz_repo import QuizRepository
@@ -38,6 +39,15 @@ class QuizService:
 
     async def quiz_list(self, user_id, **kwargs):
         return await self.repo.quiz_list(user_id, **kwargs)
+
+    async def get_teacher_quizzes(self, user_id,  filters: TeacherQuizListFilterSchema):
+        return await self.repo.get_teacher_quizzes(user_id, filters)
+
+    async def get_quiz_statistics(self, quiz_id: int, user_id: int):
+        quiz = self.repo.get(quiz_id, user_id)
+        if not quiz:
+            raise ValueError("Quiz not found or access denied")
+        return await self.repo.get_quiz_statistics(quiz_id)
 
     async def detail(self, user_id, quiz_id):
         return await self.repo.detail(user_id, quiz_id)

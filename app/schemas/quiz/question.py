@@ -23,6 +23,7 @@ class QuestionBase(BaseModel):
 
 class QuestionListSchema(QuestionBase):
     topic: str = None
+    difficulty: str = None
 
 
 class QuestionDetail(BaseModel):

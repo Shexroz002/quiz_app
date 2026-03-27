@@ -1,13 +1,24 @@
+from enum import Enum
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, ForeignKey, Text
+from sqlalchemy import String, ForeignKey, Text, Enum as SQLEnum
 from app.models.base import BaseModel
 
+class QuizGenerateType(str, Enum):
+    AI_GENERATE = "AI_GENERATE"
+    PDF = "PDF"
+    MANUAL = "MANUAL"
+    UNDEFINED = "UNDEFINED"
 
 class Quiz(BaseModel):
     __tablename__ = "quizzes"
 
     title: Mapped[str] = mapped_column(String(1500))
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quiz_generate_type: Mapped[QuizGenerateType] = mapped_column(
+        SQLEnum(QuizGenerateType,name="quiz_generate_type"),
+        default=QuizGenerateType.UNDEFINED
+    )
 
     questions = relationship(
         "Question",
