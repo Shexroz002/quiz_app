@@ -11,7 +11,7 @@ from app.services.quiz.quiz_service import get_quiz_service
 teacher_quiz_router = APIRouter(prefix="", )
 
 
-@teacher_quiz_router.get("/", response_model=Page[TeacherQuizListItemSchema])
+@teacher_quiz_router.get("/list", response_model=Page[TeacherQuizListItemSchema])
 async def list_quizzes(filters: TeacherQuizListFilterSchema = Depends(), current_user: User = Depends(get_current_user),
                        service_layer=Depends(get_quiz_service)):
     return await service_layer.get_teacher_quizzes(current_user.id, filters)

@@ -32,6 +32,7 @@ class QuizListSchema(QuizBase):
     description: str | None = None
     subject: str | None = None
     is_new: bool = False
+    quiz_id:int
 
 
 class QuizDetailSchema(QuizBase):

@@ -1,11 +1,12 @@
 from pathlib import Path
 
-from fastapi import Depends, UploadFile
+from fastapi import Depends, UploadFile, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.models.quiz import Question
 from app.repositories.quiz.question_repo import QuestionRepository
+from app.schemas.quiz.question import QuestionUpdateSchema
 
 
 class QuestionService:
@@ -46,6 +47,14 @@ class QuestionService:
 
     async def update_correct_option(self, question_id: int, user_id: int, option_id: int) -> Question:
         updated_question = await self.repo.update_correct_option(question_id, user_id, option_id)
+        await self.db.commit()
+        return updated_question
+
+    async def question_update(self, question_id: int, user_id: int, update_data: QuestionUpdateSchema) -> Question:
+        question = self.repo.detail(question_id, user_id)
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        updated_question = await self.repo.question_update(question_id, update_data)
         await self.db.commit()
         return updated_question
 

@@ -3,7 +3,7 @@ from starlette import status
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models import User
-from app.schemas.quiz.question import QuestionDetail
+from app.schemas.quiz.question import QuestionDetail, QuestionUpdateSchema
 from app.services.quiz.question_service import get_question_service, QuestionService
 
 question_router = APIRouter(prefix="",)
@@ -17,6 +17,14 @@ async def question_detail(
 ):
     return await question_service.detail(question_id, current_user.id)
 
+@question_router.put("/{question_id}/edit", status_code=status.HTTP_202_ACCEPTED,response_model=QuestionUpdateSchema)
+async def question_edit(
+        update_data: QuestionUpdateSchema,
+        question_id: int,
+        current_user: User = Depends(get_current_user),
+        question_service: QuestionService = Depends(get_question_service),
+):
+    return await question_service.question_update(question_id, current_user.id, update_data)
 
 @question_router.post(
     "/upload-image/{question_id}",

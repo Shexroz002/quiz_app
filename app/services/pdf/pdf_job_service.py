@@ -41,7 +41,7 @@ class PDFJobService:
             message="Fayl qabul qilindi",
         )
         job_new = await self.repo.create(job)
-
+        await self.db.commit()
         task = process_pdf_task.delay(str(job.id))
         await self.repo.set_task_id(job, task.id)
 

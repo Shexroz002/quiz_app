@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
 from app.core.database.base import get_db
 from app.models.quiz import Quiz, Question, Option, QuestionImage
+from app.models.quiz.quiz import QuizGenerateType
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.services.ai.ai_report_generation import report_generation
 from app.services.ai.base import ProgressCb
@@ -76,14 +77,16 @@ async def save_quiz_from_json(
         data: dict,
         pdf_path: str,
         user_id: int,
-        progress: Optional[ProgressCb] = None,
+        quiz_generate_type: QuizGenerateType,
+        progress: Optional[ProgressCb] = None
 ) -> tuple[int, int]:
     try:
         quiz = Quiz(
             title=data["quiz_title"],
             subject=data.get("subject"),
             description=data.get("description"),
-            user_id=user_id
+            user_id=user_id,
+            quiz_generate_type=quiz_generate_type
         )
         db.add(quiz)
         await db.flush()

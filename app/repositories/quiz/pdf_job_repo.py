@@ -9,8 +9,7 @@ class PDFJobRepository:
 
     async def create(self, job: PDFJob) -> PDFJob:
         self.db.add(job)
-        await self.db.commit()
-        await self.db.refresh(job)
+        await self.db.flush()
         return job
 
     async def get_by_id(self, job_id: str) -> PDFJob | None:

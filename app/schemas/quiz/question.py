@@ -39,3 +39,10 @@ class QuestionDetail(BaseModel):
 
 class QuestionDetailWithoutCorrect(QuestionDetail):
     options: list[OptionWithoutCorrect]
+
+class QuestionUpdateSchema(BaseModel):
+    topic: str = None
+    difficulty: str = None
+    question_text: str = None
+    table_markdown: str = None
+    subject: str = None

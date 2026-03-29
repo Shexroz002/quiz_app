@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 from app.core.celery_app import celery_app
 from app.core.database.base import CeleryAsyncSessionLocal
 from app.models.quiz.ai_quiz.pdf_to_quiz import PDFJob, PDFJobStatus
+from app.models.quiz.quiz import QuizGenerateType
 from app.services.ai.ai_service import AIQuizParser as UniversalAIQuizParser
 from app.services.ai.promt import QUIZ_PROMPT, QUIZ_SCHEMA, ai_generator_by_description
 from app.services.ai.providers.provider_factory import get_provider
@@ -103,6 +104,7 @@ class AIQuizTaskService:
             *,
             job: PDFJob,
             data: dict[str, Any],
+            quiz_generate_type: QuizGenerateType,
             progress: ProgressCb,
     ) -> tuple[int, int]:
         await self._update_status(
@@ -117,6 +119,7 @@ class AIQuizTaskService:
             data=data,
             pdf_path=job.file_path,
             user_id=job.user_id,
+            quiz_generate_type=quiz_generate_type,
             progress=progress,
         )
         return quiz_id, question_count
@@ -164,6 +167,7 @@ class AIQuizTaskService:
         quiz_id, question_count = await self._save_result(
             job=job,
             data=result,
+            quiz_generate_type=QuizGenerateType.PDF,
             progress=progress_cb,
         )
 
@@ -213,6 +217,7 @@ class AIQuizTaskService:
         quiz_id, question_count = await self._save_result(
             job=job,
             data=result,
+            quiz_generate_type=QuizGenerateType.AI_GENERATE,
             progress=progress_cb,
         )
 

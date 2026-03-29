@@ -95,7 +95,7 @@ class QuizRepository:
 
         stmt = (
             select(
-                Quiz.id,
+                Quiz.id.label('quiz_id'),
                 Quiz.title,
                 Quiz.user_id,
                 Quiz.created_at,

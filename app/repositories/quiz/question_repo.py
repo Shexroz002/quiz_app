@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.models import QuestionImage
 from app.models.quiz import Question
 from app.repositories.base.base_repository import BaseRepository
+from app.schemas.quiz.question import QuestionUpdateSchema
 
 
 class QuestionRepository(BaseRepository):
@@ -91,4 +92,19 @@ class QuestionRepository(BaseRepository):
         await self.db.flush()
         return option
 
+    async def question_update(self,quiz_id:int,question_update_data:QuestionUpdateSchema):
+        stmt = (
+            select(Question)
+            .where(Question.id == quiz_id)
+        )
+        result = await self.db.execute(stmt)
+        question = result.scalar_one_or_none()
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        for field, value in question_update_data.model_dump(exclude_unset=True).items():
+            setattr(question, field, value)
+
+        await self.db.flush()
+        return question
 
