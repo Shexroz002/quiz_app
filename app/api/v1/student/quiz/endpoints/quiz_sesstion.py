@@ -2,6 +2,7 @@ from typing import List, Annotated, Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.params import Body
+from fastapi_pagination import Page
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models import User
@@ -68,7 +69,7 @@ async def get_multiplayer_player_quiz_info(
                                                           status="waiting")
 
 
-@quiz_session_router.get("/multiplayer/{session_id}/participants/", response_model=List[SessionParticipantList])
+@quiz_session_router.get("/multiplayer/{session_id}/participants/", response_model=Page[SessionParticipantList])
 async def get_session_participants(
         session_id: int,
         current_user: User = Depends(get_current_user),
@@ -103,6 +104,15 @@ async def submit_answer(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.submit_answer(session_id, current_user, payload)
+
+@quiz_session_router.post("/multiplayer/{session_id}/answer/v2", response_model=SubmitAnswerResponse)
+async def submit_answer(
+        session_id: int,
+        payload: SubmitAnswerRequest,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.submit_answer_v2(session_id, current_user, payload)
 
 
 """ Invite other players to the quiz session"""

@@ -41,6 +41,7 @@ class QuestionRepository(BaseRepository):
         stmt = (
             select(Question)
             .where(Question.quiz_id == quiz_id)
+            .order_by(Question.id)
             .options(
                 selectinload(Question.options),
                 selectinload(Question.images),

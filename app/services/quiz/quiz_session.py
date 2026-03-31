@@ -2,10 +2,13 @@ import random
 import string
 from datetime import datetime
 
+import redis
 from fastapi import Depends, HTTPException
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
+from app.core.database.redis import get_redis_client
 from app.models import User
 from app.models.quiz.real_time_quiz.quiz_group import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
@@ -19,7 +22,9 @@ from app.repositories.quiz.session_participant import SessionParticipantReposito
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest
 from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
-from app.websocket import session_ws_manager
+from app.schemas.sessions.session_monitoring import ParticipantLiveStatus
+from app.services.redis_service.session_live import SessionLiveStateService
+from app.websocket import session_ws_manager, session_monitoring_ws_manager
 
 
 def generate_join_code() -> str:
@@ -27,7 +32,7 @@ def generate_join_code() -> str:
 
 
 class QuizSessionService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession,redis_client:Redis=None):
         self.db = db
         self.quiz_repo = QuizRepository(db)
         self.session_repo = QuizSessionRepository(db)
@@ -35,6 +40,9 @@ class QuizSessionService:
         self.participant_repo = SessionParticipantRepository(db)
         self.attempt_repo = QuizAttemptRepository(db)
         self.group_repo = StudentGroupRepository(db)
+        self.db = db
+        self.redis= redis_client
+        self.live_state_service = SessionLiveStateService(redis_client)
 
     async def _generate_unique_join_code(self) -> str:
         for _ in range(10):
@@ -566,6 +574,103 @@ class QuizSessionService:
         }
         return result
 
+    async def submit_answer_v2(self, session_id: int, user: User, payload: SubmitAnswerRequest):
+        session = await self.session_repo.get_by_id(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-def get_quiz_session_service(db: AsyncSession = Depends(get_db)) -> QuizSessionService:
-    return QuizSessionService(db)
+        if session.status != "running":
+            raise HTTPException(status_code=400, detail="Session is not running")
+
+        participant = await self.participant_repo.get_by_session_user(session_id, user.id)
+        if not participant:
+            raise HTTPException(status_code=403, detail="User is not a participant of this session")
+
+        in_quiz = await self.attempt_repo.is_question_in_quiz(
+            question_id=payload.question_id,
+            quiz_id=session.quiz_id,
+        )
+        if not in_quiz:
+            raise HTTPException(status_code=400, detail="Question does not belong to this quiz session")
+
+        attempt = await self.attempt_repo.get_or_create(
+            session_id=session_id,
+            participant_id=participant.id,
+        )
+
+        if attempt.finished:
+            raise HTTPException(status_code=400, detail="Session already finished")
+
+        selected_option = await self.attempt_repo.get_option_for_question(
+            question_id=payload.question_id,
+            selected_option=payload.selected_option,
+        )
+        if not selected_option:
+            raise HTTPException(status_code=400, detail="Invalid option for question.")
+
+
+        question_order = await self.attempt_repo.get_question_order_in_quiz(
+            quiz_id=session.quiz_id,
+            question_id=payload.question_id,
+        )
+        if question_order is None:
+            raise HTTPException(status_code=400, detail="Question order not found")
+
+        total_questions = await self.attempt_repo.get_total_questions_count(quiz_id=session.quiz_id)
+
+
+
+
+        # Redis state yangilash
+        live_state = await self.live_state_service.get_participant_state(session_id, participant.id)
+
+        if not live_state:
+            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+            live_state = await self.live_state_service.create_or_get_initial_state(
+                session_id=session_id,
+                participant_id=participant.id,
+                user_id=user.id,
+                full_name=full_name,
+                nickname=user.username,
+                profile_image=user.profile_image,
+                is_host=participant.is_host,
+                total_questions=total_questions,
+            )
+
+        updated_state = await self.live_state_service.update_after_answer(
+            session_id=session_id,
+            participant_id=participant.id,
+            is_correct=selected_option.is_correct,
+            current_question_order=question_order,
+            total_questions=total_questions,
+        )
+
+        if updated_state:
+            await session_monitoring_ws_manager.broadcast(
+                session_id=session_id,
+                event="participant_monitoring_updated",
+                payload={
+                    "session_id": session_id,
+                    "participant": updated_state.model_dump(mode="json"),
+                },
+            )
+
+            if updated_state.status == ParticipantLiveStatus.FINISHED:
+                await session_monitoring_ws_manager.broadcast(
+                    session_id=session_id,
+                    event="participant_finished",
+                    payload={
+                        "session_id": session_id,
+                        "participant": updated_state.model_dump(mode="json"),
+                    },
+                )
+
+        return {
+            "question_id": selected_option.question_id,
+            "selected_option": selected_option.label,
+            "is_correct": selected_option.is_correct,
+        }
+
+
+def get_quiz_session_service(db: AsyncSession = Depends(get_db),redis_client:Redis=Depends(get_redis_client)) -> QuizSessionService:
+    return QuizSessionService(db,redis_client)

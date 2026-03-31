@@ -2,8 +2,10 @@ from typing import List
 
 from fastapi import APIRouter, Depends
 from fastapi_pagination import Page
+from redis.asyncio import Redis
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
+from app.core.database.redis import get_redis_client
 from app.models import User
 
 from app.schemas.quiz.quiz_session import (
@@ -14,6 +16,8 @@ from app.schemas.quiz.quiz_session import (
 from app.schemas.quiz.session_participant import SessionParticipantList
 
 from app.services.quiz.quiz_session import get_quiz_session_service
+from app.services.quiz.session_monitoring_service import SessionMonitoringService
+from app.services.redis_service.session_live import SessionLiveStateService
 
 quiz_group_session_router = APIRouter(prefix="/live", tags=["Quiz Sessions"])
 
@@ -68,3 +72,16 @@ async def get_quiz_session_questions(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.multiplayer_session_quiz_info(session_id, current_user.id)
+
+
+
+@quiz_group_session_router.get("/{session_id}/monitoring")
+async def get_session_monitoring(
+    session_id: int,
+    redis: Redis = Depends(get_redis_client),
+):
+    live_state_service = SessionLiveStateService(redis)
+    monitoring_service = SessionMonitoringService(live_state_service)
+
+    snapshot = await monitoring_service.build_snapshot(session_id)
+    return snapshot

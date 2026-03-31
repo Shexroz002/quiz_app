@@ -77,10 +77,10 @@ class QuizAttemptRepository:
         await self.db.flush()
         return answer
 
-    async def get_option_for_question(self, question_id: int, option_label: str) -> Option | None:
+    async def get_option_for_question(self, question_id: int, selected_option: str) -> Option | None:
         stmt = select(Option).where(
             Option.question_id == question_id,
-            Option.label == option_label,
+            Option.label == selected_option,
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -139,3 +139,24 @@ class QuizAttemptRepository:
         )
         result = await self.db.execute(stmt)
         return result.mappings().all()
+
+
+    async def get_question_order_in_quiz(self, quiz_id: int,question_id: int):
+        stmt = (
+            select(
+                Question.id,
+                func.row_number()
+                .over(order_by=Question.id)
+                .label("question_order"),
+            )
+            .where(Question.quiz_id == quiz_id)
+            .subquery()
+        )
+        stmt2 = select(stmt.c.question_order).where(stmt.c.id == question_id)
+        result = await self.db.execute(stmt2)
+        return result.scalar_one_or_none()
+
+    async def get_total_questions_count(self, quiz_id: int) -> int:
+        stmt = select(func.count(Question.id)).where(Question.quiz_id == quiz_id)
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one() or 0)
