@@ -37,6 +37,31 @@ class QuizSessionRepository:
         await self.db.flush()
         return quiz_session
 
+    async def get_running_sessions_by_host(self,host_id:int):
+
+        stmt = (
+            select(
+                QuizSession.id.label("session_id"),
+                Quiz.title.label("title"),
+                Quiz.subject.label("subject"),
+                func.count(SessionParticipant.id).label("participants_count"),
+                QuizSession.duration_minutes.label("duration_minutes"),
+                func.to_char(QuizSession.started_at, "HH24:MI").label("started_at"),
+                QuizSession.join_code.label("join_code"),
+                QuizSession.session_type
+            )
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .outerjoin(SessionParticipant, SessionParticipant.session_id == QuizSession.id)
+            .where(
+                QuizSession.host_id == host_id,
+                QuizSession.status == SessionStatus.running,
+            )
+            .group_by(QuizSession.id, Quiz.title, Quiz.subject)
+        )
+
+        result = await self.db.execute(stmt)
+        return result.mappings().all()
+
     async def start_session(self, quiz_session: QuizSession) -> QuizSession:
         now = datetime.now(UTC)
         quiz_session.status = SessionStatus.running

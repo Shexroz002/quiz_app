@@ -13,6 +13,7 @@ from app.models import User
 from app.models.quiz.real_time_quiz.quiz_group import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
 from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus
+from app.repositories.account import UserRepository
 from app.repositories.group.student_group_repository import StudentGroupRepository
 from app.repositories.quiz.question_repo import QuestionRepository
 from app.repositories.quiz.quiz_attempt_repo import QuizAttemptRepository
@@ -22,7 +23,7 @@ from app.repositories.quiz.session_participant import SessionParticipantReposito
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest
 from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
-from app.schemas.sessions.session_monitoring import ParticipantLiveStatus
+from app.schemas.sessions.session_monitoring import ParticipantLiveStatus, ConnectionStatus
 from app.services.redis_service.session_live import SessionLiveStateService
 from app.websocket import session_ws_manager, session_monitoring_ws_manager
 
@@ -34,6 +35,7 @@ def generate_join_code() -> str:
 class QuizSessionService:
     def __init__(self, db: AsyncSession,redis_client:Redis=None):
         self.db = db
+        self.user_repo = UserRepository(db)
         self.quiz_repo = QuizRepository(db)
         self.session_repo = QuizSessionRepository(db)
         self.question_repo = QuestionRepository(db)
@@ -115,6 +117,10 @@ class QuizSessionService:
         }
         return result
 
+    async def running_sessions(self, host_id: int):
+        sessions = await self.session_repo.get_running_sessions_by_host(host_id)
+        return sessions
+
     async def join_quiz_session(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
         if not quiz_session:
@@ -189,6 +195,22 @@ class QuizSessionService:
 
         attempts_created = 0
         for participant in participants:
+            user = self.user_repo.get_by_id(participant.user_id)
+            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+            total_questions = await self.quiz_repo.quiz_question_count(quiz_session.id)
+            await self.live_state_service.create_or_get_initial_state(
+                session_id=session_id,
+                participant_id=participant.id,
+                user_id=user.id,
+                full_name=full_name,
+                nickname=user.username,
+                profile_image=user.profile_image,
+                is_host=participant.is_host,
+                total_questions=total_questions,
+                connection_status=ConnectionStatus.OFFLINE
+            )
+
+
             attempt = await self.attempt_repo.get_by_session_participant(session_id, participant.id)
             if not attempt:
                 await self.attempt_repo.create(session_id=session_id, participant_id=participant.id)
@@ -244,7 +266,7 @@ class QuizSessionService:
 
         selected_option = await self.attempt_repo.get_option_for_question(
             question_id=payload.question_id,
-            option_label=payload.selected_option,
+            selected_option=payload.selected_option,
         )
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option for question.")

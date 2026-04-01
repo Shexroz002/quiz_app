@@ -26,13 +26,14 @@ class QuizBase(BaseModel):
     title: str
 
 
-class QuizListSchema(QuizBase):
+class QuizListSchema(BaseModel):
     created_at: datetime.datetime
     question_count: int = 0
     description: str | None = None
     subject: str | None = None
     is_new: bool = False
     quiz_id:int
+    title: str
 
 
 class QuizDetailSchema(QuizBase):

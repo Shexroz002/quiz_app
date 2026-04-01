@@ -19,6 +19,14 @@ class QuizRepository:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
+    async def quiz_question_count(self,quiz_id: int):
+        stmt = (
+            select(func.count(Question.id))
+            .where(Question.quiz_id == quiz_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get(self, quiz_id: int, user_id: int):
         stmt = select(Quiz).where(Quiz.id == quiz_id, Quiz.user_id == user_id)
         result = await self.db.execute(stmt)

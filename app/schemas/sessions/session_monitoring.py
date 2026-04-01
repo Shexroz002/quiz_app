@@ -90,3 +90,17 @@ class ParticipantMonitoringEventSchema(BaseModel):
     event: str = "participant_monitoring_updated"
     session_id: int
     participant: ParticipantLiveStateSchema
+
+from pydantic import BaseModel, Field, constr
+
+
+class LiveQuizCardSchema(BaseModel):
+    session_id: int=Field(..., description="O'quvchining to'liq ismi")
+    title: str = Field(..., description="Mathematics Practice Test")
+    subject: str|None = Field(..., description="Matematika")
+    class_name: str = Field(default="1-A", description="9-A",)
+    participants_count: int = Field(..., description="Qatnashuvchilarni max soni")
+    duration_minutes: int = Field(...,  description="Quiz davomiyligi minutlarda")
+    started_at: str = Field(..., description="HH:MM formatdagi vaqt")
+    join_code: str= Field(..., description="A7K92D")
+    session_type:str=Field(..., description="Session turi: individual, group yoki public")

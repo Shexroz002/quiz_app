@@ -19,10 +19,10 @@ class SessionLiveStateService:
         return f"quiz_session:{session_id}:participants"
 
     async def upsert_participant_state(
-        self,
-        session_id: int,
-        state: ParticipantLiveStateSchema,
-        ttl_seconds: int = 60 * 60 * 6,
+            self,
+            session_id: int,
+            state: ParticipantLiveStateSchema,
+            ttl_seconds: int = 60 * 60 * 6,
     ) -> None:
         participant_key = self._participant_key(session_id, state.participant_id)
         participants_key = self._participants_set_key(session_id)
@@ -34,9 +34,9 @@ class SessionLiveStateService:
         await pipe.execute()
 
     async def get_participant_state(
-        self,
-        session_id: int,
-        participant_id: int,
+            self,
+            session_id: int,
+            participant_id: int,
     ) -> Optional[ParticipantLiveStateSchema]:
         raw = await self.redis.get(self._participant_key(session_id, participant_id))
         if not raw:
@@ -44,8 +44,8 @@ class SessionLiveStateService:
         return ParticipantLiveStateSchema.model_validate_json(raw)
 
     async def list_participants(
-        self,
-        session_id: int,
+            self,
+            session_id: int,
     ) -> list[ParticipantLiveStateSchema]:
         participant_ids = await self.redis.smembers(self._participants_set_key(session_id))
         if not participant_ids:
@@ -66,15 +66,16 @@ class SessionLiveStateService:
         return result
 
     async def create_or_get_initial_state(
-        self,
-        session_id: int,
-        participant_id: int,
-        user_id: int,
-        full_name: str,
-        nickname: str | None,
-        profile_image: str | None,
-        is_host: bool,
-        total_questions: int,
+            self,
+            session_id: int,
+            participant_id: int,
+            user_id: int,
+            full_name: str,
+            nickname: str | None,
+            profile_image: str | None,
+            is_host: bool,
+            total_questions: int,
+            connection_status: ConnectionStatus = ConnectionStatus.OFFLINE,
     ) -> ParticipantLiveStateSchema:
         existing = await self.get_participant_state(session_id, participant_id)
         if existing:
@@ -106,9 +107,9 @@ class SessionLiveStateService:
         return state
 
     async def mark_online(
-        self,
-        session_id: int,
-        participant_id: int,
+            self,
+            session_id: int,
+            participant_id: int,
     ) -> ParticipantLiveStateSchema | None:
         state = await self.get_participant_state(session_id, participant_id)
         if not state:
@@ -123,9 +124,9 @@ class SessionLiveStateService:
         return state
 
     async def mark_offline(
-        self,
-        session_id: int,
-        participant_id: int,
+            self,
+            session_id: int,
+            participant_id: int,
     ) -> ParticipantLiveStateSchema | None:
         state = await self.get_participant_state(session_id, participant_id)
         if not state:
@@ -137,9 +138,9 @@ class SessionLiveStateService:
         return state
 
     async def touch_heartbeat(
-        self,
-        session_id: int,
-        participant_id: int,
+            self,
+            session_id: int,
+            participant_id: int,
     ) -> ParticipantLiveStateSchema | None:
         state = await self.get_participant_state(session_id, participant_id)
         if not state:
@@ -151,12 +152,12 @@ class SessionLiveStateService:
         return state
 
     async def update_after_answer(
-        self,
-        session_id: int,
-        participant_id: int,
-        is_correct: bool,
-        current_question_order: int,
-        total_questions: int,
+            self,
+            session_id: int,
+            participant_id: int,
+            is_correct: bool,
+            current_question_order: int,
+            total_questions: int,
     ) -> ParticipantLiveStateSchema | None:
         state = await self.get_participant_state(session_id, participant_id)
         now = datetime.now(timezone.utc)
