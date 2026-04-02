@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import APIRouter, Depends
 from fastapi_pagination import Page
 from starlette import status
@@ -17,7 +19,7 @@ async def create_contact(friend_id: int, contact_service: ContactService = Depen
     return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "Contact created successfully."})
 
 
-@contact_router.get("/list/", response_model=list[ContactResponse])
+@contact_router.get("/list/", response_model=Page[ContactResponse])
 async def contact_list(contact_service: ContactService = Depends(get_contact_service),
                        current_user: User = Depends(get_current_user)):
     return await contact_service.contact_list(current_user.id)
@@ -25,4 +27,6 @@ async def contact_list(contact_service: ContactService = Depends(get_contact_ser
 @contact_router.get("/suggestions/", response_model=Page[UserShortInfoSchema])
 async def contact_suggestions(contact_service: ContactService = Depends(get_contact_service),
                        current_user: User = Depends(get_current_user)):
+    data = await contact_service.contact_suggestions(current_user.id)
+    print("await contact_service.contact_suggestions(current_user.id)",data)
     return await contact_service.contact_suggestions(current_user.id)

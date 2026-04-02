@@ -30,10 +30,15 @@ class ContactRepository(BaseRepository[Contact]):
     async def contact_list(self, contact_user_id: int) -> Sequence[Contact]:
         stmt = select(Contact).options(selectinload(Contact.friend)).where(Contact.user_id == contact_user_id)
         result = await self.db.execute(stmt)
+        return paginate(result.scalars().all())
+
+    async def _contact_list(self, contact_user_id: int) -> Sequence[Contact]:
+        stmt = select(Contact).where(Contact.user_id == contact_user_id)
+        result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def contact_suggestions(self, contact_user_id: int, search: str) -> Sequence[User]:
-        contacts = await self.contact_list(contact_user_id)
+    async def contact_suggestions(self, contact_user_id: int, search: str | None = None) -> Sequence[User]:
+        contacts = await self._contact_list(contact_user_id)
         contact_ids = {contact.friend_id for contact in contacts}
         stmt = select(User).where(~User.id.in_(contact_ids.union({contact_user_id})))
         if search:

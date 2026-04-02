@@ -123,7 +123,7 @@ class SessionLeaderboardRow(BaseModel):
     correct_answers: int | None = None
     wrong_answers: int | None = None
     total_questions: int | None = None
-
+    participant_count: int | None = None
     finished_at: datetime | None = None
     created_at: datetime
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from fastapi_pagination import Page
+from starlette import status
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
@@ -33,7 +34,7 @@ async def delete_quiz(quiz_id: int, current_user=Depends(get_current_user), serv
     return await service_layer.delete(quiz_id, current_user.id)
 
 
-@teacher_quiz_router.put("/{quiz_id}/", response_model=QuizListSchema)
+@teacher_quiz_router.put("/{quiz_id}/", status_code=status.HTTP_201_CREATED)
 async def update_quiz(quiz_id: int, update_data: QuizUpdateSchema, current_user=Depends(get_current_user),
                       service_layer=Depends(get_quiz_service)):
     return await service_layer.update(quiz_id, current_user.id, update_data.model_dump())

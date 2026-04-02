@@ -34,11 +34,13 @@ class QuizListSchema(BaseModel):
     is_new: bool = False
     quiz_id:int
     title: str
+    quiz_generate_type: QuizGenerateType = Field(..., description="Test turi")
 
 
 class QuizDetailSchema(QuizBase):
     description: str | None = None
     subject: str | None = None
+    quiz_generate_type: QuizGenerateType = Field(..., description="Test turi")
     questions: list[QuestionListSchema] = []
 
     model_config = ConfigDict(from_attributes=True)

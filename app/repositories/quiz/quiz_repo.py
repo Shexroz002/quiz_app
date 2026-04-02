@@ -109,6 +109,7 @@ class QuizRepository:
                 Quiz.created_at,
                 Quiz.description,
                 Quiz.subject,
+                Quiz.quiz_generate_type,
                 func.count(Question.id).label("question_count"),
                 ((func.now() - Quiz.created_at) < text("interval '7 days'")).label("is_new"),
             )

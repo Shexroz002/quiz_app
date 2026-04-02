@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi_pagination import Page
+
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models.account.user import User
 from app.schemas.account.users import UserListSchema, UserContactListSchema, UserDetailPatchSchema
@@ -31,7 +33,7 @@ async def update_user(
     return await user_service.update_user(user_id, current_user, user_update)
 
 
-@users_router.get("/search", response_model=list[UserContactListSchema])
+@users_router.get("/search", response_model=Page[UserContactListSchema])
 async def search_users(
         search: str = None,
         user_service: UserService = Depends(get_user_service),

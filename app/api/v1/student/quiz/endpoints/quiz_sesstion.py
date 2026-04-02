@@ -222,7 +222,7 @@ async def single_player_error_analysis(
 
 
 # fetch quiz session hisotry for single player
-@quiz_session_router.get("/me/history/", response_model=List[SessionLeaderboardRow])
+@quiz_session_router.get("/me/history/", response_model=Page[SessionLeaderboardRow])
 async def single_player_quiz_history(
         search: Optional[str] = Query(
             default=None,
@@ -235,7 +235,7 @@ async def single_player_quiz_history(
     return await quiz_session.personal_quiz_session_history(current_user.id, search)
 
 
-@quiz_session_router.get("/{session_id}/leaderboard/", response_model=List[ParticipantResultResponse])
+@quiz_session_router.get("/{session_id}/leaderboard/", response_model=Page[ParticipantResultResponse])
 async def quiz_session_leaderboard(
         session_id: int,
         current_user: User = Depends(get_current_user),

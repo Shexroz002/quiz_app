@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+
+from fastapi_pagination import paginate
 from sqlalchemy import func, cast, literal, JSON, and_
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy import select
@@ -201,6 +203,15 @@ class QuizSessionRepository:
         return res.mappings().all()
 
     async def get_personal_quiz_session_history(self, user_id: int, search: str):
+        participants_subq = (
+            select(
+                SessionParticipant.session_id.label("session_id"),
+                func.count(SessionParticipant.id).label("participant_count"),
+            )
+            .group_by(SessionParticipant.session_id)
+            .subquery()
+        )
+
         base_cte = (
             select(
                 QuizSession.id.label("session_id"),
@@ -213,9 +224,7 @@ class QuizSessionRepository:
                     order_by=QuizAttempt.score.desc(),
                 )
                 .label("rank"),
-                func.count()
-                .over(partition_by=QuizSession.id)
-                .label("participant_count"),
+                participants_subq.c.participant_count.label("participant_count"),
                 QuizAttempt.score.label("correct_answers"),
                 QuizAttempt.wrong_answers.label("wrong_answers"),
                 QuizAttempt.total_questions.label("total_questions"),
@@ -232,8 +241,13 @@ class QuizSessionRepository:
                     QuizAttempt.participant_id == SessionParticipant.id,
                 ),
             )
+            .outerjoin(
+                participants_subq,
+                participants_subq.c.session_id == QuizSession.id,
+            )
             .cte("base")
         )
+
         if search:
             stmt = (
                 select(base_cte)
@@ -249,8 +263,9 @@ class QuizSessionRepository:
                 .where(base_cte.c.user_id == user_id)
                 .order_by(base_cte.c.session_id.desc())
             )
+
         result = await self.db.execute(stmt)
-        return result.mappings().all()
+        return paginate(result.mappings().all())
 
     async def get_session_participant_rank_list(self, session_id: int, user_id: int):
         stmt = (
@@ -282,4 +297,4 @@ class QuizSessionRepository:
         )
 
         result = await self.db.execute(stmt)
-        return result.mappings().all()
+        return paginate(result.mappings().all())
