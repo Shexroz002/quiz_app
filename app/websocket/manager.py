@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Any
 
 from fastapi import WebSocket
-from starlette.websockets import WebSocketDisconnect
+from fastapi.websockets import WebSocketDisconnect
 
 
 class SessionConnectionManager:

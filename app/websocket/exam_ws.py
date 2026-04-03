@@ -9,6 +9,7 @@ from app.core.database.base import AsyncSessionLocal
 from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus, SessionParticipant
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
+from app.schemas.quiz.question import BASE_URL
 from app.websocket.manager import session_ws_manager
 from app.websocket.utils.auth_ws import authenticate_websocket
 
@@ -85,6 +86,21 @@ async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
 
             if event == "ping":
                 await websocket.send_json({"event": "pong", "data": {}})
+            if event == "chat_message":
+                user_info = {
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "avatar_url": f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
+                }
+                data = {
+                    "user_info": user_info,
+                    "message": message.get("message"),
+                }
+                await session_ws_manager.broadcast(
+                    session_id=session_id,
+                    event="chat_message",
+                    payload=data
+                )
             else:
                 await websocket.send_json(
                     {
