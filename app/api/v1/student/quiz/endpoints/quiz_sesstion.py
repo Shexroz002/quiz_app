@@ -6,11 +6,12 @@ from fastapi_pagination import Page
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models import User
+from app.models.quiz.real_time_quiz.quiz_session import SessionType
 from app.schemas.notification.notification import NotificationCreateSchema
 from app.schemas.quiz.quiz_attempt import (
     FinishQuizResponse,
     SubmitAnswerRequest,
-    SubmitAnswerResponse, AnswerItem,
+    SubmitAnswerResponse, AnswerItem, ChangeCurrentQuestionRequest,
 )
 from app.schemas.quiz.quiz_session import (
     JoinSessionRequest,
@@ -36,7 +37,7 @@ async def quiz_session_create(
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.create(quiz_session_data, current_user)
+    return await quiz_session.create(quiz_session_data, current_user, SessionType.public)
 
 
 @quiz_session_router.post("/multiplayer/join/", response_model=SessionDetail)
@@ -96,16 +97,16 @@ async def get_quiz_session_questions(
     return await quiz_session.multiplayer_session_quiz_info(session_id, current_user.id)
 
 
-@quiz_session_router.post("/multiplayer/{session_id}/answer/", response_model=SubmitAnswerResponse)
-async def submit_answer(
-        session_id: int,
-        payload: SubmitAnswerRequest,
-        current_user: User = Depends(get_current_user),
-        quiz_session=Depends(get_quiz_session_service),
-):
-    return await quiz_session.submit_answer(session_id, current_user, payload)
+# @quiz_session_router.post("/multiplayer/{session_id}/answer/", response_model=SubmitAnswerResponse)
+# async def submit_answer(
+#         session_id: int,
+#         payload: SubmitAnswerRequest,
+#         current_user: User = Depends(get_current_user),
+#         quiz_session=Depends(get_quiz_session_service),
+# ):
+#     return await quiz_session.submit_answer(session_id, current_user, payload)
 
-@quiz_session_router.post("/multiplayer/{session_id}/answer/v2", response_model=SubmitAnswerResponse)
+@quiz_session_router.post("/multiplayer/{session_id}/answer", response_model=SubmitAnswerResponse)
 async def submit_answer(
         session_id: int,
         payload: SubmitAnswerRequest,
@@ -115,13 +116,23 @@ async def submit_answer(
     return await quiz_session.submit_answer_v2(session_id, current_user, payload)
 
 
+@quiz_session_router.post("/multiplayer/{session_id}/change/question/order", status_code=200)
+async def change_question_order(
+        session_id: int,
+        payload: ChangeCurrentQuestionRequest,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.change_current_question(session_id, payload.participant_id, payload.question_order_id)
+
+
 """ Invite other players to the quiz session"""
 
 
 @quiz_session_router.post("/multiplayer/{session_id}/invite/")
 async def invite_players(
         session_code: str,
-        recipient_id: int = Body(..., embed=True, description="ID of the user to invite"),
+        session_id: int, recipient_id: int = Body(..., embed=True, description="ID of the user to invite"),
         current_user: User = Depends(get_current_user),
         notification_service=Depends(get_notification_service),
 ):

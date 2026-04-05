@@ -37,7 +37,7 @@ class SessionParticipantRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_participant_list(self, session_id: int):
+    async def get_participant_list(self, session_id: int,pagination=True):
         stmt = (
             select(
                 SessionParticipant.id.label("participant_id"),
@@ -54,7 +54,9 @@ class SessionParticipantRepository:
             .where(SessionParticipant.session_id == session_id)
         )
         result = await self.db.execute(stmt)
-        return paginate(result.mappings().all())
+        if pagination:
+            return paginate(result.mappings().all())
+        return result.mappings().all()
 
     async def disconnect_participant(self, participant_id: int) -> SessionParticipant | None:
         stmt = (

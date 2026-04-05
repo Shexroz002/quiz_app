@@ -90,8 +90,28 @@ class QuizSessionRepository:
                 Quiz.id.label("quiz_id"),
                 Quiz.title.label("quiz_name"),
                 Quiz.subject.label("subject_name"),
+                QuizSession.session_type
             )
             .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .where(
+                QuizSession.id == session_id
+            )
+        )
+
+        if host_id:
+            stmt = stmt.where(QuizSession.host_id == host_id)
+
+        result = await self.db.execute(stmt)
+        return result.mappings().first()
+
+    async def player_session(
+            self,
+            session_id: int,
+            host_id: int | None = None,
+            status=SessionStatus.running,
+    ):
+        stmt = (
+            select(QuizSession)
             .where(
                 QuizSession.id == session_id,
                 QuizSession.status == status,
@@ -102,7 +122,7 @@ class QuizSessionRepository:
             stmt = stmt.where(QuizSession.host_id == host_id)
 
         result = await self.db.execute(stmt)
-        return result.mappings().first()
+        return result.scalars().first()
 
     async def get_session_questions_with_answers(
             self,

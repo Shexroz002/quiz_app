@@ -17,7 +17,9 @@ class SubmitAnswerResponse(BaseModel):
     question_id: int
     selected_option: str
 
-
+class ChangeCurrentQuestionRequest(BaseModel):
+    question_order_id: int
+    participant_id: int
 
 class TopicStatisticSchema(BaseModel):
     topic_name:str
@@ -31,7 +33,7 @@ class FinishQuizResponse(BaseModel):
     answered_questions: int
     correct_answers: int
     wrong_answers: int
-    spend_time: int
+    spend_time: int|None=None
     score: int
     finished: bool
     topic_statistic:List[TopicStatisticSchema]

@@ -90,7 +90,7 @@ class SessionLiveStateService:
             profile_image=profile_image,
             is_host=is_host,
             status=ParticipantLiveStatus.PREPARING,
-            connection_status=ConnectionStatus.ONLINE,
+            connection_status=connection_status,
             current_question=1 if total_questions > 0 else 0,
             answered_count=0,
             total_questions=total_questions,
@@ -177,7 +177,6 @@ class SessionLiveStateService:
         state.last_answer_at = now
         state.last_seen_at = now
         state.question_answer_items[current_question_order] = is_correct
-        print("state", state.question_answer_items.values())
         state.correct_count = list(state.question_answer_items.values()).count(True)
         state.wrong_count = list(state.question_answer_items.values()).count(False)
 
@@ -193,5 +192,21 @@ class SessionLiveStateService:
             state.finished_at = now
             state.current_question = total_questions
 
+        await self.upsert_participant_state(session_id, state)
+        return state
+
+
+    async def change_current_question(
+            self,
+            session_id: int,
+            participant_id: int,
+            question_order_id: int,
+    ) -> ParticipantLiveStateSchema | None:
+        state = await self.get_participant_state(session_id, participant_id)
+        if not state:
+            return None
+
+        state.current_question = question_order_id
+        state.last_seen_at = datetime.now(timezone.utc)
         await self.upsert_participant_state(session_id, state)
         return state

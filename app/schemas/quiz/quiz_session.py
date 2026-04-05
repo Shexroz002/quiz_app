@@ -44,8 +44,7 @@ class GroupQuizSessionCreate(QuizSessionCreate):
 class JoinSessionRequest(BaseModel):
     session_code: str
 
-
-class QuizSessionResponse(BaseModel):
+class QuizSessionTeacherResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     session_id: int
@@ -59,6 +58,11 @@ class QuizSessionResponse(BaseModel):
     questions_count: int
     started_at: datetime | None
     finished_at: datetime | None
+    session_type: SessionType
+
+class QuizSessionResponse(QuizSessionTeacherResponse):
+    model_config = ConfigDict(from_attributes=True)
+    current_participant_id: int|None
 
 
 class StartSessionResponse(BaseModel):

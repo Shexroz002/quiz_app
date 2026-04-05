@@ -21,7 +21,7 @@ from app.repositories.quiz.quiz_repo import QuizRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.schemas.quiz.question import BASE_URL
-from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest
+from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest, AnswerItem
 from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
 from app.schemas.sessions.session_monitoring import ParticipantLiveStatus, ConnectionStatus
 from app.services.redis_service.session_live import SessionLiveStateService
@@ -33,7 +33,7 @@ def generate_join_code() -> str:
 
 
 class QuizSessionService:
-    def __init__(self, db: AsyncSession,redis_client:Redis=None):
+    def __init__(self, db: AsyncSession, redis_client: Redis = None):
         self.db = db
         self.user_repo = UserRepository(db)
         self.quiz_repo = QuizRepository(db)
@@ -43,7 +43,7 @@ class QuizSessionService:
         self.attempt_repo = QuizAttemptRepository(db)
         self.group_repo = StudentGroupRepository(db)
         self.db = db
-        self.redis= redis_client
+        self.redis = redis_client
         self.live_state_service = SessionLiveStateService(redis_client)
 
     async def _generate_unique_join_code(self) -> str:
@@ -76,7 +76,8 @@ class QuizSessionService:
             "finished": attempt.finished,
         }
 
-    async def create(self, quiz_session_data: QuizSessionCreate, user: User):
+    async def create(self, quiz_session_data: QuizSessionCreate, user: User,
+                     session_type: SessionType = SessionType.individual):
         quiz = await self.quiz_repo.get(quiz_session_data.quiz_id, user.id)
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
@@ -88,7 +89,8 @@ class QuizSessionService:
                 **quiz_session_data.model_dump(),
                 "host_id": user.id,
                 "join_code": join_code,
-                "status": "waiting",
+                "status": SessionStatus.waiting,
+                "session_type": session_type,
             }
         )
 
@@ -195,7 +197,7 @@ class QuizSessionService:
 
         attempts_created = 0
         for participant in participants:
-            user = self.user_repo.get_by_id(participant.user_id)
+            user = await self.user_repo.get_by_id(participant.user_id)
             full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
             total_questions = await self.quiz_repo.quiz_question_count(quiz_session.id)
             await self.live_state_service.create_or_get_initial_state(
@@ -204,12 +206,11 @@ class QuizSessionService:
                 user_id=user.id,
                 full_name=full_name,
                 nickname=user.username,
-                profile_image=user.profile_image,
+                profile_image=f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
                 is_host=participant.is_host,
                 total_questions=total_questions,
                 connection_status=ConnectionStatus.OFFLINE
             )
-
 
             attempt = await self.attempt_repo.get_by_session_participant(session_id, participant.id)
             if not attempt:
@@ -316,7 +317,7 @@ class QuizSessionService:
             raise HTTPException(status_code=404, detail="Session not found or access denied")
 
         participants = await self.participant_repo.get_all_by_session_id(session_id)
-        participant_rows = await self.participant_repo.get_participant_list(session_id)
+        participant_rows = await self.participant_repo.get_participant_list(session_id, pagination=False)
         rows_by_id = {int(row["participant_id"]): row for row in participant_rows}
 
         results = []
@@ -452,6 +453,7 @@ class QuizSessionService:
             raise HTTPException(status_code=404, detail="Session not found")
 
         questions = await self.question_repo.list_with_details(quiz_session.quiz_id, user_id)
+        current_participant = await self.participant_repo.get_by_session_user(session_id, user_id)
         result = {
             "session_id": quiz_session.id,
             "quiz_id": quiz_session.quiz_id,
@@ -460,17 +462,24 @@ class QuizSessionService:
             "duration_minutes": quiz_session.duration_minutes,
             "join_code": quiz_session.join_code,
             "host_id": quiz_session.host_id,
+            "session_type":quiz_session.session_type,
             "questions_count": len(questions),
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
             "finished_at": quiz_session.finished_at,
+            "current_participant_id":current_participant.id if current_participant else None,
         }
         if is_question:
             result["questions"] = questions
         return result
 
-    async def finish_single_player_quiz(self, session_id: int, user_id: int, answers: list[SubmitAnswerRequest]):
-        quiz_session = await self.session_repo.get_single_player_session(session_id)
+    async def finish_single_player_quiz(
+            self,
+            session_id: int,
+            user_id: int,
+            answers: list[AnswerItem]
+    ):
+        quiz_session = await self.session_repo.player_session(session_id)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -487,7 +496,7 @@ class QuizSessionService:
         for answer in answers:
             selected_option = await self.attempt_repo.get_option_for_question(
                 question_id=answer.question_id,
-                option_label=answer.selected_option,
+                selected_option=answer.selected_option,
             )
             if selected_option:
                 await self.attempt_repo.upsert_answer(
@@ -497,18 +506,29 @@ class QuizSessionService:
                     is_correct=selected_option.is_correct,
                 )
 
+        now = datetime.now()
+
         attempt.finished = True
-        attempt.finished_at = datetime.now()
+        attempt.finished_at = now
         # quiz_session.status = "finished"
-        quiz_session.finished_at = datetime.now()
+        quiz_session.finished_at = now
+
+        await self.db.flush()
+
         result = await self._build_attempt_result(
             session_id=session_id,
             quiz_id=quiz_session.quiz_id,
             attempt=attempt,
         )
         result["finished"] = True
+
         # spend_time return in seconds
-        result["spend_time"] = int((quiz_session.finished_at - quiz_session.started_at).total_seconds())
+        if quiz_session.started_at and quiz_session.finished_at:
+            result["spend_time"] = int(
+                (quiz_session.finished_at - quiz_session.started_at).total_seconds()
+            )
+        else:
+            result["spend_time"] = 0
 
         await self.db.commit()
         return result
@@ -565,7 +585,8 @@ class QuizSessionService:
                 "duration_minutes": quiz_session_data.duration_minutes,
                 "host_id": user.id,
                 "join_code": join_code,
-                "status": SessionStatus.waiting
+                "status": SessionStatus.waiting,
+                "session_type":quiz_session_data.session_type,
             }
         )
 
@@ -593,6 +614,7 @@ class QuizSessionService:
             "questions_count": 30,  # TODO: get real question count for quiz
             "started_at": quiz_session.started_at,
             "finished_at": quiz_session.finished_at,
+            "session_type": quiz_session.session_type,
         }
         return result
 
@@ -630,7 +652,6 @@ class QuizSessionService:
         if not selected_option:
             raise HTTPException(status_code=400, detail="Invalid option for question.")
 
-
         question_order = await self.attempt_repo.get_question_order_in_quiz(
             quiz_id=session.quiz_id,
             question_id=payload.question_id,
@@ -639,9 +660,6 @@ class QuizSessionService:
             raise HTTPException(status_code=400, detail="Question order not found")
 
         total_questions = await self.attempt_repo.get_total_questions_count(quiz_id=session.quiz_id)
-
-
-
 
         # Redis state yangilash
         live_state = await self.live_state_service.get_participant_state(session_id, participant.id)
@@ -693,6 +711,24 @@ class QuizSessionService:
             "is_correct": selected_option.is_correct,
         }
 
+    async def change_current_question(self, session_id: int, participant_id: int, question_order_id: int):
+        updated_state = await self.live_state_service.change_current_question(
+            session_id=session_id,
+            participant_id=participant_id,
+            question_order_id=question_order_id
+        )
 
-def get_quiz_session_service(db: AsyncSession = Depends(get_db),redis_client:Redis=Depends(get_redis_client)) -> QuizSessionService:
-    return QuizSessionService(db,redis_client)
+        if updated_state:
+            await session_monitoring_ws_manager.broadcast(
+                session_id=session_id,
+                event="participant_monitoring_updated",
+                payload={
+                    "session_id": session_id,
+                    "participant": updated_state.model_dump(mode="json"),
+                },
+            )
+
+
+def get_quiz_session_service(db: AsyncSession = Depends(get_db),
+                             redis_client: Redis = Depends(get_redis_client)) -> QuizSessionService:
+    return QuizSessionService(db, redis_client)

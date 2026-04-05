@@ -25,79 +25,80 @@ async def student_quiz_session_websocket(
     await session_monitoring_ws_manager.connect(session_id, websocket)
     live_state_service = SessionLiveStateService(redis)
 
-    async with AsyncSessionLocal() as db:
-        participant_repo = SessionParticipantRepository(db)
+    # async with AsyncSessionLocal() as db:
+    #     participant_repo = SessionParticipantRepository(db)
+    #
+    #     participant = await participant_repo.get_by_session_user(
+    #         session_id=session_id,
+    #         user_id=user.id
+    #     )
+    #
+    #     if not participant:
+    #         await websocket.close(code=1008, reason="Not a participant")
+    #         return
 
-        participant = await participant_repo.get_by_session_user(
-            session_id=session_id,
-            user_id=user.id
-        )
-
-        if not participant:
-            await websocket.close(code=1008, reason="Not a participant")
-            return
-
-    participant_id = participant.id
+    # participant_id = participant.id
 
     try:
-        state = await live_state_service.mark_online(session_id, participant_id)
-
-        if state:
-            await session_monitoring_ws_manager.broadcast(
-                session_id=session_id,
-                event="participant_monitoring_updated",
-                payload={
-                    "session_id": session_id,
-                    "participant": state.model_dump(mode="json"),
-                },
-            )
+        # state = await live_state_service.mark_online(session_id, participant_id)
+        #
+        # if state:
+        #     await session_monitoring_ws_manager.broadcast(
+        #         session_id=session_id,
+        #         event="participant_monitoring_updated",
+        #         payload={
+        #             "session_id": session_id,
+        #             "participant": state.model_dump(mode="json"),
+        #         },
+        #     )
 
         while True:
             data = await websocket.receive_json()
             event = data.get("event")
 
-            if event == "heartbeat":
-                state = await live_state_service.touch_heartbeat(session_id, participant_id)
+            # if event == "heartbeat":
+            #     state = await live_state_service.touch_heartbeat(session_id, participant_id)
+            #
+            #     if state:
+            #         await session_monitoring_ws_manager.broadcast(
+            #             session_id=session_id,
+            #             event="participant_monitoring_updated",
+            #             payload={
+            #                 "session_id": session_id,
+            #                 "participant": state.model_dump(mode="json"),
+            #             },
+            #         )
 
-                if state:
-                    await session_monitoring_ws_manager.broadcast(
-                        session_id=session_id,
-                        event="participant_monitoring_updated",
-                        payload={
-                            "session_id": session_id,
-                            "participant": state.model_dump(mode="json"),
-                        },
-                    )
-
-                await websocket.send_json({
-                    "event": "heartbeat_ack",
-                    "payload": {"ok": True},
-                })
+            await websocket.send_json({
+                "event": "heartbeat_ack",
+                "payload": {"ok": True},
+            })
 
     except WebSocketDisconnect:
-        state = await live_state_service.mark_offline(session_id, participant_id)
-
-        if state:
-            await session_monitoring_ws_manager.broadcast(
-                session_id=session_id,
-                event="participant_monitoring_updated",
-                payload={
-                    "session_id": session_id,
-                    "participant": state.model_dump(mode="json"),
-                },
-            )
+        # state = await live_state_service.mark_offline(session_id, participant_id)
+        #
+        # if state:
+        #     await session_monitoring_ws_manager.broadcast(
+        #         session_id=session_id,
+        #         event="participant_monitoring_updated",
+        #         payload={
+        #             "session_id": session_id,
+        #             "participant": state.model_dump(mode="json"),
+        #         },
+        #     )
+        pass
 
     except Exception:
-        state = await live_state_service.mark_offline(session_id, participant_id)
-
-        if state:
-            await session_monitoring_ws_manager.broadcast(
-                session_id=session_id,
-                event="participant_monitoring_updated",
-                payload={
-                    "session_id": session_id,
-                    "participant": state.model_dump(mode="json"),
-                },
-            )
+        # state = await live_state_service.mark_offline(session_id, participant_id)
+        #
+        # if state:
+        #     await session_monitoring_ws_manager.broadcast(
+        #         session_id=session_id,
+        #         event="participant_monitoring_updated",
+        #         payload={
+        #             "session_id": session_id,
+        #             "participant": state.model_dump(mode="json"),
+        #         },
+        #     )
         await websocket.close()
 

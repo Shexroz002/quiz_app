@@ -10,7 +10,7 @@ from app.models import User
 
 from app.schemas.quiz.quiz_session import (
     QuizSessionResponse,
-    GroupQuizSessionCreate, StartSessionResponse, StartSessionSinglePlayerResponse
+    GroupQuizSessionCreate, StartSessionResponse, StartSessionSinglePlayerResponse, QuizSessionTeacherResponse
 
 )
 from app.schemas.quiz.session_participant import SessionParticipantList
@@ -27,7 +27,7 @@ quiz_group_session_router = APIRouter(prefix="/live", tags=["Quiz Sessions"])
 """
 
 
-@quiz_group_session_router.post("/", status_code=201, response_model=QuizSessionResponse)
+@quiz_group_session_router.post("/", status_code=201, response_model=QuizSessionTeacherResponse)
 async def quiz_session_create(
         quiz_session_data: GroupQuizSessionCreate,
         current_user: User = Depends(get_current_user),
