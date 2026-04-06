@@ -76,10 +76,10 @@ services:
       quiz-db:
         condition: service_healthy
     command: >
-      celery -A app.core.celery_app worker
+     celery -A app.core.celery_app worker
       --loglevel=info
-      --concurrency=10
-      -Q celery,pdf_ai_queue
+      --concurrency=24
+      -Q celery,pdf_ai_queue,ai_test_generator
     networks:
       - quiz-network
     volumes:
