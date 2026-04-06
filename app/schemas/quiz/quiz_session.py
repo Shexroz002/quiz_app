@@ -156,3 +156,79 @@ class ParticipantResultResponse(BaseModel):
         if value.startswith("http"):
             return value
         return f"{BASE_URL}/{value}"
+
+
+class TeacherSessionResultItemSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: int = Field(..., description="Session ID")
+    quiz_id: int = Field(..., description="Quiz ID")
+    quiz_name: str = Field(..., description="Quiz nomi")
+    subject_name: str | None = Field(default=None, description="Fan nomi")
+
+    session_date: datetime | None = Field(
+        default=None,
+        description="Session sanasi"
+    )
+
+    participants_count: int = Field(
+        default=0,
+        ge=0,
+        description="Ishtirokchilar soni"
+    )
+
+    average_score: float = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="O'rtacha ball foizda"
+    )
+
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SessionResultsDetailSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: int
+    quiz_id: int
+    quiz_name: str
+    subject_name: str | None = None
+    status: str
+
+    session_date: datetime | None = None
+    participants_count: int = Field(default=0, ge=0)
+    duration_minutes: int = Field(default=0, ge=0)
+
+    average_score: float = Field(default=0, ge=0, le=100)
+    highest_score: float = Field(default=0, ge=0, le=100)
+    lowest_score: float = Field(default=0, ge=0, le=100)
+
+    hardest_question_number: int | None = None
+    hardest_question_accuracy: float = Field(default=0, ge=0, le=100)
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SessionQuestionAccuracyItemSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    question_id: int = Field(..., description="Savol ID")
+    question_number: int = Field(..., description="Savol tartib raqami, masalan Q1")
+    label: str = Field(..., description="Frontend uchun label, masalan Q1")
+
+    total_answers: int = Field(default=0, ge=0, description="Jami javoblar soni")
+    correct_answers: int = Field(default=0, ge=0, description="To'g'ri javoblar soni")
+
+    accuracy_percent: float = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Savol aniqligi foizda"
+    )
+
+    level: str = Field(
+        ...,
+        description="Savol darajasi: easy, medium, hard"
+    )

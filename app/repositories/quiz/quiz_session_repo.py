@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi_pagination import paginate
-from sqlalchemy import func, cast, literal, JSON, and_
+from sqlalchemy import func, cast, literal, JSON, and_, Numeric, case, String
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -318,3 +318,354 @@ class QuizSessionRepository:
 
         result = await self.db.execute(stmt)
         return paginate(result.mappings().all())
+
+    async def teacher_session_results(self, teacher_id: int):
+        participants_subq = (
+            select(
+                SessionParticipant.session_id.label("session_id"),
+                func.count(func.distinct(SessionParticipant.user_id)).label("participants_count"),
+            )
+            .group_by(SessionParticipant.session_id)
+            .subquery()
+        )
+
+        average_score_subq = (
+            select(
+                QuizAttempt.session_id.label("session_id"),
+                func.coalesce(
+                    func.round(
+                        cast(
+                            func.avg(
+                                case(
+                                    (
+                                        QuizAttempt.total_questions > 0,
+                                        100.0 * QuizAttempt.score / QuizAttempt.total_questions,
+                                    ),
+                                    else_=None,
+                                )
+                            ),
+                            Numeric(10, 2),
+                        ),
+                        2,
+                    ),
+                    0,
+                ).label("average_score"),
+            )
+            .where(QuizAttempt.finished.is_(True))
+            .group_by(QuizAttempt.session_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                QuizSession.id.label("session_id"),
+                Quiz.id.label("quiz_id"),
+                Quiz.title.label("quiz_name"),
+                Quiz.subject.label("subject_name"),
+                QuizSession.created_at.label("session_date"),
+                func.coalesce(participants_subq.c.participants_count, 0).label("participants_count"),
+                func.coalesce(average_score_subq.c.average_score, 0).label("average_score"),
+            )
+            .select_from(QuizSession)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .outerjoin(
+                participants_subq,
+                participants_subq.c.session_id == QuizSession.id,
+            )
+            .outerjoin(
+                average_score_subq,
+                average_score_subq.c.session_id == QuizSession.id,
+            )
+            .where(QuizSession.host_id == teacher_id)
+            .order_by(QuizSession.created_at.desc())
+        )
+
+        result = await self.db.execute(stmt)
+        return paginate(result.mappings().all())
+
+    async def get_teacher_session_results_detail(
+            self,
+            session_id: int,
+            host_id: int | None = None,
+    ):
+        attempt_percentage_expr = case(
+            (
+                QuizAttempt.total_questions > 0,
+                100.0 * QuizAttempt.score / QuizAttempt.total_questions,
+            ),
+            else_=None,
+        )
+
+        participants_subq = (
+            select(
+                SessionParticipant.session_id.label("session_id"),
+                func.count(func.distinct(SessionParticipant.user_id)).label("participants_count"),
+            )
+            .group_by(SessionParticipant.session_id)
+            .subquery()
+        )
+
+        score_stats_subq = (
+            select(
+                QuizAttempt.session_id.label("session_id"),
+                func.coalesce(
+                    func.round(
+                        cast(
+                            func.avg(attempt_percentage_expr).filter(QuizAttempt.finished.is_(True)),
+                            Numeric(10, 2),
+                        ),
+                        2,
+                    ),
+                    0,
+                ).label("average_score"),
+                func.coalesce(
+                    func.round(
+                        cast(
+                            func.max(attempt_percentage_expr).filter(QuizAttempt.finished.is_(True)),
+                            Numeric(10, 2),
+                        ),
+                        2,
+                    ),
+                    0,
+                ).label("highest_score"),
+                func.coalesce(
+                    func.round(
+                        cast(
+                            func.min(attempt_percentage_expr).filter(QuizAttempt.finished.is_(True)),
+                            Numeric(10, 2),
+                        ),
+                        2,
+                    ),
+                    0,
+                ).label("lowest_score"),
+            )
+            .group_by(QuizAttempt.session_id)
+            .subquery()
+        )
+
+        question_order_subq = (
+            select(
+                Question.id.label("question_id"),
+                Question.quiz_id.label("quiz_id"),
+                func.row_number()
+                .over(
+                    partition_by=Question.quiz_id,
+                    order_by=Question.id.asc(),
+                )
+                .label("question_number"),
+            )
+            .subquery()
+        )
+
+        question_accuracy_subq = (
+            select(
+                QuizAttempt.session_id.label("session_id"),
+                AttemptAnswer.question_id.label("question_id"),
+                func.coalesce(
+                    func.round(
+                        cast(
+                            100.0
+                            * func.count(AttemptAnswer.id).filter(AttemptAnswer.is_correct.is_(True))
+                            / func.nullif(func.count(AttemptAnswer.id), 0),
+                            Numeric(10, 2),
+                        ),
+                        2,
+                    ),
+                    0,
+                ).label("question_accuracy"),
+            )
+            .select_from(QuizAttempt)
+            .join(AttemptAnswer, AttemptAnswer.attempt_id == QuizAttempt.id)
+            .where(QuizAttempt.finished.is_(True))
+            .group_by(QuizAttempt.session_id, AttemptAnswer.question_id)
+            .subquery()
+        )
+
+        hardest_question_ranked_subq = (
+            select(
+                question_accuracy_subq.c.session_id,
+                question_accuracy_subq.c.question_id,
+                question_accuracy_subq.c.question_accuracy,
+                func.row_number()
+                .over(
+                    partition_by=question_accuracy_subq.c.session_id,
+                    order_by=(
+                        question_accuracy_subq.c.question_accuracy.asc(),
+                        question_accuracy_subq.c.question_id.asc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .subquery()
+        )
+
+        hardest_question_subq = (
+            select(
+                hardest_question_ranked_subq.c.session_id.label("session_id"),
+                hardest_question_ranked_subq.c.question_id.label("question_id"),
+                hardest_question_ranked_subq.c.question_accuracy.label("question_accuracy"),
+            )
+            .where(hardest_question_ranked_subq.c.rn == 1)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                QuizSession.id.label("session_id"),
+                Quiz.id.label("quiz_id"),
+                Quiz.title.label("quiz_name"),
+                Quiz.subject.label("subject_name"),
+                cast(QuizSession.status, String).label("status"),
+                QuizSession.created_at.label("session_date"),
+                func.coalesce(participants_subq.c.participants_count, 0).label("participants_count"),
+                QuizSession.duration_minutes.label("duration_minutes"),
+                func.coalesce(score_stats_subq.c.average_score, 0).label("average_score"),
+                func.coalesce(score_stats_subq.c.highest_score, 0).label("highest_score"),
+                func.coalesce(score_stats_subq.c.lowest_score, 0).label("lowest_score"),
+                question_order_subq.c.question_number.label("hardest_question_number"),
+                func.coalesce(hardest_question_subq.c.question_accuracy, 0).label("hardest_question_accuracy"),
+            )
+            .select_from(QuizSession)
+            .join(Quiz, Quiz.id == QuizSession.quiz_id)
+            .outerjoin(
+                participants_subq,
+                participants_subq.c.session_id == QuizSession.id,
+            )
+            .outerjoin(
+                score_stats_subq,
+                score_stats_subq.c.session_id == QuizSession.id,
+            )
+            .outerjoin(
+                hardest_question_subq,
+                hardest_question_subq.c.session_id == QuizSession.id,
+            )
+            .outerjoin(
+                question_order_subq,
+                and_(
+                    question_order_subq.c.question_id == hardest_question_subq.c.question_id,
+                    question_order_subq.c.quiz_id == QuizSession.quiz_id,
+                ),
+            )
+            .where(QuizSession.id == session_id)
+        )
+
+        if host_id is not None:
+            stmt = stmt.where(QuizSession.host_id == host_id)
+
+        result = await self.db.execute(stmt)
+        row = result.mappings().first()
+
+        if not row:
+            return None
+
+        return {
+            "session_id": row["session_id"],
+            "quiz_id": row["quiz_id"],
+            "quiz_name": row["quiz_name"],
+            "subject_name": row["subject_name"],
+            "status": row["status"],
+            "session_date": row["session_date"],
+            "participants_count": int(row["participants_count"] or 0),
+            "duration_minutes": int(row["duration_minutes"] or 0),
+            "average_score": float(row["average_score"] or 0),
+            "highest_score": float(row["highest_score"] or 0),
+            "lowest_score": float(row["lowest_score"] or 0),
+            "hardest_question_number": row["hardest_question_number"],
+            "hardest_question_accuracy": float(row["hardest_question_accuracy"] or 0),
+            "hardest_question_label": (
+                f"Q{row['hardest_question_number']}"
+                if row["hardest_question_number"] is not None
+                else None
+            ),
+        }
+
+    async def get_session_question_accuracy(
+            self,
+            session_id: int,
+            host_id: int | None = None,
+    ):
+        question_order_subq = (
+            select(
+                Question.id.label("question_id"),
+                Question.quiz_id.label("quiz_id"),
+                func.row_number()
+                .over(
+                    partition_by=Question.quiz_id,
+                    order_by=Question.id.asc(),
+                )
+                .label("question_number"),
+            )
+            .subquery()
+        )
+
+        accuracy_expr = func.coalesce(
+            func.round(
+                cast(
+                    100.0
+                    * func.count(AttemptAnswer.id).filter(AttemptAnswer.is_correct.is_(True))
+                    / func.nullif(func.count(AttemptAnswer.id), 0),
+                    Numeric(10, 2),
+                ),
+                2,
+            ),
+            0,
+        )
+
+        stmt = (
+            select(
+                AttemptAnswer.question_id.label("question_id"),
+                question_order_subq.c.question_number.label("question_number"),
+                func.concat("Q", question_order_subq.c.question_number).label("label"),
+
+                func.count(AttemptAnswer.id).label("total_answers"),
+                func.count(AttemptAnswer.id)
+                .filter(AttemptAnswer.is_correct.is_(True))
+                .label("correct_answers"),
+
+                accuracy_expr.label("accuracy_percent"),
+
+                case(
+                    (accuracy_expr >= 75, "easy"),
+                    (accuracy_expr >= 50, "medium"),
+                    else_="hard",
+                ).label("level"),
+            )
+            .select_from(QuizSession)
+            .join(QuizAttempt, QuizAttempt.session_id == QuizSession.id)
+            .join(AttemptAnswer, AttemptAnswer.attempt_id == QuizAttempt.id)
+            .join(
+                question_order_subq,
+                and_(
+                    question_order_subq.c.question_id == AttemptAnswer.question_id,
+                    question_order_subq.c.quiz_id == QuizSession.quiz_id,
+                ),
+            )
+            .where(
+                QuizSession.id == session_id,
+                QuizAttempt.finished.is_(True),
+            )
+            .group_by(
+                AttemptAnswer.question_id,
+                question_order_subq.c.question_number,
+            )
+            .order_by(question_order_subq.c.question_number.asc())
+        )
+
+        if host_id is not None:
+            stmt = stmt.where(QuizSession.host_id == host_id)
+
+        result = await self.db.execute(stmt)
+        rows = result.mappings().all()
+
+        return [
+            {
+                "question_id": row["question_id"],
+                "question_number": int(row["question_number"]),
+                "label": row["label"],
+                "total_answers": int(row["total_answers"] or 0),
+                "correct_answers": int(row["correct_answers"] or 0),
+                "accuracy_percent": float(row["accuracy_percent"] or 0),
+                "level": row["level"],
+            }
+            for row in rows
+        ]

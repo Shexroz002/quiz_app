@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi_pagination import Page
 from redis.asyncio import Redis
 
@@ -10,7 +10,9 @@ from app.models import User
 
 from app.schemas.quiz.quiz_session import (
     QuizSessionResponse,
-    GroupQuizSessionCreate, StartSessionResponse, StartSessionSinglePlayerResponse, QuizSessionTeacherResponse
+    GroupQuizSessionCreate, StartSessionResponse, StartSessionSinglePlayerResponse, QuizSessionTeacherResponse,
+    TeacherSessionResultItemSchema, SessionResultsDetailSchema, SessionQuestionAccuracyItemSchema,
+    ParticipantResultResponse
 
 )
 from app.schemas.quiz.session_participant import SessionParticipantList
@@ -42,6 +44,55 @@ async def get_running_sessions(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.running_sessions(current_user.id)
+
+
+@quiz_group_session_router.get("/results", response_model=Page[TeacherSessionResultItemSchema],
+                               )
+async def teacher_session_results(
+        current_user=Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.teacher_session_results(current_user.id)
+
+
+@quiz_group_session_router.get(
+    "/results/{session_id}",
+    response_model=SessionResultsDetailSchema,
+)
+async def get_session_results_detail(
+        session_id: int,
+        current_user=Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    data = await quiz_session.teacher_session_result_details(
+        session_id=session_id,
+        host_id=current_user.id,
+    )
+    if not data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return data
+
+
+@quiz_group_session_router.get(
+    "/{session_id}/question-accuracy",
+    response_model=list[SessionQuestionAccuracyItemSchema],
+)
+async def get_session_question_accuracy(
+        session_id: int,
+        current_user=Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.get_session_question_accuracy(
+        session_id=session_id,
+        host_id=current_user.id,
+    )
+@quiz_group_session_router.get("/{session_id}/leaderboard/", response_model=Page[ParticipantResultResponse])
+async def quiz_session_leaderboard(
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    return await quiz_session.session_participant_rank_list(session_id, current_user.id)
 
 
 
@@ -82,12 +133,11 @@ async def get_quiz_session_questions(
     return await quiz_session.multiplayer_session_quiz_info(session_id, current_user.id)
 
 
-
 @quiz_group_session_router.get("/{session_id}/monitoring")
 async def get_session_monitoring(
-    session_id: int,
-    current_user: User = Depends(get_current_user),
-    redis: Redis = Depends(get_redis_client),
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        redis: Redis = Depends(get_redis_client),
 ):
     live_state_service = SessionLiveStateService(redis)
     monitoring_service = SessionMonitoringService(live_state_service)

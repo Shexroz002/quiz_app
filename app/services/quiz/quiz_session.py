@@ -462,12 +462,12 @@ class QuizSessionService:
             "duration_minutes": quiz_session.duration_minutes,
             "join_code": quiz_session.join_code,
             "host_id": quiz_session.host_id,
-            "session_type":quiz_session.session_type,
+            "session_type": quiz_session.session_type,
             "questions_count": len(questions),
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
             "finished_at": quiz_session.finished_at,
-            "current_participant_id":current_participant.id if current_participant else None,
+            "current_participant_id": current_participant.id if current_participant else None,
         }
         if is_question:
             result["questions"] = questions
@@ -586,7 +586,7 @@ class QuizSessionService:
                 "host_id": user.id,
                 "join_code": join_code,
                 "status": SessionStatus.waiting,
-                "session_type":quiz_session_data.session_type,
+                "session_type": quiz_session_data.session_type,
             }
         )
 
@@ -727,6 +727,24 @@ class QuizSessionService:
                     "participant": updated_state.model_dump(mode="json"),
                 },
             )
+
+    async def teacher_session_results(self, teacher_id: int):
+        return await self.session_repo.teacher_session_results(teacher_id)
+
+    async def teacher_session_result_details(self, session_id: int, host_id: int, ):
+        return await self.session_repo.get_teacher_session_results_detail(
+            session_id=session_id,
+            host_id=host_id,
+        )
+    async def get_session_question_accuracy(
+        self,
+        session_id: int,
+        host_id: int,
+    ):
+        return await self.session_repo.get_session_question_accuracy(
+            session_id=session_id,
+            host_id=host_id,
+        )
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db),
