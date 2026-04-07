@@ -123,7 +123,7 @@ async def save_quiz_from_json(
                 db.add(
                     Option(
                         question_id=question.id,
-                        label=opt["id"],
+                        label=opt["id"].upper() if opt.get("id") else '',
                         text=opt["text"],
                         is_correct=opt["is_correct"],
                     )
