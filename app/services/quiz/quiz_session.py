@@ -1,8 +1,6 @@
 import random
 import string
 from datetime import datetime
-
-import redis
 from fastapi import Depends, HTTPException
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +22,7 @@ from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest, AnswerItem
 from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
 from app.schemas.sessions.session_monitoring import ParticipantLiveStatus, ConnectionStatus
+from app.services.notification.notification_service import get_notification_service
 from app.services.redis_service.session_live import SessionLiveStateService
 from app.websocket import session_ws_manager, session_monitoring_ws_manager
 
@@ -130,6 +129,11 @@ class QuizSessionService:
 
         if quiz_session.status != "waiting":
             raise HTTPException(status_code=400, detail="Session already started")
+
+        if quiz_session.session_type == SessionType.group:
+            if not await self.session_repo.is_user_in_session_groups(quiz_session.id, user.id):
+                raise HTTPException(status_code=403,
+                                    detail="Bu faqat belgilangan guruh azolari uchun mo'ljallangan test!")
 
         is_participant = await self.participant_repo.is_participant(quiz_session.id, user.id)
         if not is_participant:
@@ -595,15 +599,27 @@ class QuizSessionService:
              if group ids are provided, validate that the groups belong to the teacher and add them to the quiz session
              if group ids are not provided, the quiz session will be open to all students of the teacher
             """
-            validate_group_ids = self.group_repo.validate_groups(teacher_id=user.id,
+            validate_group_ids = await self.group_repo.validate_groups(teacher_id=user.id,
                                                                  group_ids=quiz_session_data.group_ids)
             if validate_group_ids != quiz_session_data.group_ids:
                 raise HTTPException(status_code=400, detail="Group ids do not match")
 
             await self.groups_add_to_quiz(session_id=quiz_session.id, user_id=user.id,
                                           group_ids=quiz_session_data.group_ids)
+
+
         await self.db.commit()
         await self.db.refresh(quiz_session)
+
+        if quiz_session_data.session_type == SessionType.group and quiz_session_data.group_ids:
+            notification_ser = await get_notification_service(db=self.db)
+            group_members = await self.group_repo.student_list_by_group_ids(quiz_session_data.group_ids)
+            await notification_ser.send_notification_to_group_by_teacher(
+                current_user=user,
+                session_code=quiz_session.join_code,
+                user_ids=group_members
+            )
+
         result = {
             "session_id": quiz_session.id,
             "quiz_id": quiz_session.quiz_id,
@@ -736,10 +752,11 @@ class QuizSessionService:
             session_id=session_id,
             host_id=host_id,
         )
+
     async def get_session_question_accuracy(
-        self,
-        session_id: int,
-        host_id: int,
+            self,
+            session_id: int,
+            host_id: int,
     ):
         return await self.session_repo.get_session_question_accuracy(
             session_id=session_id,

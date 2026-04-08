@@ -1,7 +1,9 @@
+from __future__ import annotations
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from app.models.base import BaseModel
+from app.models.group.student_group import StudentGroup
+from app.models.quiz.real_time_quiz.quiz_session import QuizSession
 
 
 class QuizSessionGroup(BaseModel):
@@ -23,12 +25,12 @@ class QuizSessionGroup(BaseModel):
         UniqueConstraint("session_id", "group_id", name="uq_session_group"),
     )
 
-    session: Mapped["QuizSession"] = relationship(
+    session: Mapped[QuizSession] = relationship(
         "QuizSession",
         back_populates="session_groups",
     )
 
-    group: Mapped["StudentGroup"] = relationship(
+    group: Mapped[StudentGroup] = relationship(
         "StudentGroup",
         back_populates="group_sessions",
     )

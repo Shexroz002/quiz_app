@@ -1,7 +1,10 @@
+from typing import List
+
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
+from app.models import User
 from app.repositories.notification.notification_repo import NotificationRepo
 from app.schemas.notification.notification import NotificationCreateSchema, NotificationResponseSchema
 from app.websocket import notification_manager
@@ -38,6 +41,23 @@ class NotificationService:
         )
 
         return notification
+
+
+    async def send_notification_to_group_by_teacher(self, current_user:User,session_code:str,user_ids: List[int]):
+       for user_id in user_ids:
+           data = {
+               "recipient_id": user_id,
+               "sender_id": current_user.id,
+               "type": "test_invite",
+               "action_type": "test_invite",
+               "payload": {"session_code": session_code},
+               "title": "Quiz Session  taklif",
+               "message": f"{current_user.first_name} {current_user.last_name} sizni birgalikda test ishlashga taklif qilmoqda."
+           }
+           data_schema = NotificationCreateSchema(**data)
+           await self.create_notification(data_schema)
+
+
 
 
 async def get_notification_service(db: AsyncSession = Depends(get_db)) -> NotificationService:

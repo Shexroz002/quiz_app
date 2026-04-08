@@ -1,13 +1,14 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi_pagination import paginate
-from sqlalchemy import func, cast, literal, JSON, and_, Numeric, case, String
+from sqlalchemy import func, cast, literal, JSON, and_, Numeric, case, String, exists
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage, \
-    Quiz, User, Subject
+    Quiz, User, Subject, StudentGroupMember
+from app.models.quiz.real_time_quiz import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
 
 
@@ -669,3 +670,21 @@ class QuizSessionRepository:
             }
             for row in rows
         ]
+
+    async def is_user_in_session_groups(
+            self,
+            session_id: int,
+            user_id: int,
+    ) -> bool:
+        stmt = select(
+            exists().where(
+                and_(
+                    QuizSessionGroup.session_id == session_id,
+                    QuizSessionGroup.group_id == StudentGroupMember.group_id,
+                    StudentGroupMember.student_id == user_id,
+                )
+            )
+        )
+
+        result = await self.db.execute(stmt)
+        return bool(result.scalar())

@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi_pagination import paginate
 from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +39,6 @@ class StudentGroupRepository:
                 )
             )
 
-
     async def validate_groups(self, teacher_id: int, group_ids: list[int]) -> list[int]:
         if not group_ids:
             return []
@@ -52,7 +53,6 @@ class StudentGroupRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-
     async def remove_members(self, group_id: int, student_ids: list[int]):
         stmt = (
             delete(StudentGroupMember)
@@ -62,7 +62,6 @@ class StudentGroupRepository:
             )
         )
         await self.db.execute(stmt)
-
 
     async def group_members(
             self,
@@ -102,7 +101,6 @@ class StudentGroupRepository:
         result = await self.db.execute(stmt)
         return paginate(result.mappings().all())
 
-
     async def is_group_member(self, group_id: int, student_id: int) -> bool:
         stmt = select(StudentGroupMember).where(
             StudentGroupMember.group_id == group_id,
@@ -110,7 +108,6 @@ class StudentGroupRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
-
 
     async def list_groups_by_teacher(self, teacher_id: int, search: str | None = None,
                                      subject_id: int | None = None, ):
@@ -224,3 +221,11 @@ class StudentGroupRepository:
         result = await self.db.execute(stmt)
         rows = result.mappings().all()
         return paginate(rows)
+
+    async def student_list_by_group_ids(self,group_ids:List[int]) -> List[int]:
+        stmt = (
+            select(StudentGroupMember.student_id)
+            .where(StudentGroupMember.group_id.in_(group_ids))
+        )
+        result = await self.db.execute(stmt)
+        return list(set(result.scalars().all()))

@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.notification import Notification, NotificationType, NotificationActionType
+from app.models.notification import Notification
 from app.schemas.notification.notification import NotificationCreateSchema
 
 

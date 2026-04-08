@@ -8,8 +8,7 @@ from sqlalchemy import (
     DateTime,
     Boolean,
     Enum,
-    JSON,
-    Integer,
+    JSON
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
