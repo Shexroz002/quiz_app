@@ -600,13 +600,12 @@ class QuizSessionService:
              if group ids are not provided, the quiz session will be open to all students of the teacher
             """
             validate_group_ids = await self.group_repo.validate_groups(teacher_id=user.id,
-                                                                 group_ids=quiz_session_data.group_ids)
+                                                                       group_ids=quiz_session_data.group_ids)
             if validate_group_ids != quiz_session_data.group_ids:
                 raise HTTPException(status_code=400, detail="Group ids do not match")
 
             await self.groups_add_to_quiz(session_id=quiz_session.id, user_id=user.id,
                                           group_ids=quiz_session_data.group_ids)
-
 
         await self.db.commit()
         await self.db.refresh(quiz_session)
@@ -762,6 +761,55 @@ class QuizSessionService:
             session_id=session_id,
             host_id=host_id,
         )
+
+    async def student_session_result_details(self, session_id: int, group_id:int, member_id: int):
+        session = await self.session_repo.get_by_id(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if session.session_type != SessionType.group:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        is_member = await self.group_repo.is_group_member(group_id, member_id)
+        if not is_member:
+            raise HTTPException(status_code=404, detail="Member not found")
+
+        return await self.session_repo.get_teacher_session_results_detail(
+            session_id=session_id,
+            host_id=session.host_id,
+        )
+
+
+    async def student_session_question_accuracy(self, session_id: int, group_id, member_id: int):
+        session = await self.session_repo.get_by_id(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if session.session_type != SessionType.group:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        is_member = await self.group_repo.is_group_member(group_id, member_id)
+        if not is_member:
+            raise HTTPException(status_code=404, detail="Member not found")
+
+        return await self.session_repo.get_session_question_accuracy(
+            session_id=session_id,
+            host_id=session.host_id,
+        )
+
+    async def student_session_participant_rank_list(self, session_id: int, group_id, member_id: int):
+        session = await self.session_repo.get_by_id(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if session.session_type != SessionType.group:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        is_member = await self.group_repo.is_group_member(group_id, member_id)
+        if not is_member:
+            raise HTTPException(status_code=404, detail="Member not found")
+        rank_list = await self.session_repo.get_session_participant_rank_list(session_id, session.host_id)
+        return rank_list
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db),

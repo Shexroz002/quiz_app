@@ -5,7 +5,8 @@ from fastapi_pagination import Page
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models.group.student_group import GroupColor
 from app.schemas.group.student_group import StudentGroupResponseSchema, StudentGroupCreateSchema, \
-    StudentGroupUpdateSchema, StudentGroupCardSchema, GroupCoverImageResponseSchema, GroupMemberTableItemSchema
+    StudentGroupUpdateSchema, StudentGroupCardSchema, GroupCoverImageResponseSchema, GroupMemberTableItemSchema, \
+    StudentGroupDetailCardSchema, GroupStudentPerformanceSchema, GroupTestResultItemSchema
 from app.services.group.student_group_service import get_student_group_service, StudentGroupService
 
 student_group_router = APIRouter(prefix="", )
@@ -118,3 +119,37 @@ async def list_groups(
         service: StudentGroupService = Depends(get_student_group_service),
 ):
     return await service.list_groups(current_user.id, search=search, subject_id=subject_id)
+
+
+@student_group_router.get("/{group_id}/detail-card", response_model=StudentGroupDetailCardSchema)
+async def get_group_detail_card(
+        group_id: int,
+        current_user=Depends(get_current_user),
+        service: StudentGroupService = Depends(get_student_group_service),
+):
+    data = await service.get_group_detail_card(
+        group_id=group_id,
+        teacher_id=current_user.id,
+    )
+    if not data:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return data
+
+
+@student_group_router.get("/{group_id}/students-performance", response_model=Page[GroupStudentPerformanceSchema])
+async def get_group_students_performance(
+        group_id: int,
+        search: str | None = Query(None),
+        current_user=Depends(get_current_user),
+        service: StudentGroupService = Depends(get_student_group_service),
+):
+    return await service.get_group_students_performance(group_id=group_id, teacher_id=current_user.id, search=search)
+
+
+@student_group_router.get("/{group_id}/sessions", response_model=Page[GroupTestResultItemSchema])
+async def get_group_tests(
+        group_id: int,
+        current_user=Depends(get_current_user),
+        service: StudentGroupService = Depends(get_student_group_service),
+):
+    return await service.get_group_test_results(group_id=group_id, teacher_id=current_user.id)

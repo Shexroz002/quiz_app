@@ -35,15 +35,6 @@ class StudentGroupService:
 
         group = await self.repo.create_group(group)
         if data.student_ids:
-            # stmt = select(Contact.friend_id).where(
-            #     Contact.user_id == teacher_id,
-            #     Contact.friend_id.in_(data.student_ids),
-            # )
-            # result = await self.db.execute(stmt)
-            # allowed_ids = set(result.scalars().all())
-            #
-            # valid_students = [sid for sid in data.student_ids if sid in allowed_ids]
-
             await self.repo.add_members(group.id, data.student_ids, teacher_id)
 
         await self.db.commit()
@@ -80,6 +71,7 @@ class StudentGroupService:
         await self.repo.remove_members(group_id, student_ids)
         await self.db.commit()
         return group
+
     async def group_members(self, group_id: int, teacher_id: int, search: str | None = None):
         group = await self.repo.get_group(group_id)
         if not group:
@@ -99,7 +91,7 @@ class StudentGroupService:
         return group
 
     async def list_groups(self, teacher_id: int, search: str | None = None, subject_id: int | None = None):
-        return await self.repo.list_groups_by_teacher(teacher_id, search, subject_id)
+        return await self.repo.list_groups(teacher_id, search, subject_id)
 
     @staticmethod
     async def upload_image(teacher_id: int, image: UploadFile):
@@ -136,6 +128,37 @@ class StudentGroupService:
         await self.db.commit()
 
         return None
+
+    async def get_group_detail_card(self, group_id: int, teacher_id: int, ):
+        return await self.repo.get_group_detail_card(group_id=group_id, teacher_id=teacher_id, )
+
+    async def get_group_students_performance(self, group_id: int, teacher_id: int, search: str | None = None, ):
+        return await self.repo.get_group_students_performance(group_id=group_id, teacher_id=teacher_id, search=search)
+
+    async def get_group_test_results(self, group_id: int, teacher_id: int, ):
+        return await self.repo.get_group_test_results(group_id=group_id, teacher_id=teacher_id)
+
+    async def list_groups_by_member_id(self, member_id: int, search: str | None = None, subject_id: int | None = None):
+        return await self.repo.list_groups(None, search, subject_id, member_id)
+
+    async def group_detail_card_for_student(self, group_id: int, member_id: int, ):
+        if not await self.repo.is_group_member(group_id, member_id):
+            raise ValueError("Permission denied")
+        group = await self.repo.get_group(group_id)
+        return await self.repo.get_group_detail_card(group_id=group_id, teacher_id=group.teacher_id)
+
+    async def group_students_performance(self, group_id: int, member_id: int, search: str | None = None, ):
+        if not await self.repo.is_group_member(group_id, member_id):
+            raise ValueError("Permission denied")
+        group = await self.repo.get_group(group_id)
+        return await self.repo.get_group_students_performance(group_id=group_id, teacher_id=group.teacher_id, search=search)
+
+    async def group_test_results(self, group_id: int, member_id: int, ):
+        if not await self.repo.is_group_member(group_id, member_id):
+            raise ValueError("Permission denied")
+        group = await self.repo.get_group(group_id)
+        return await self.repo.get_group_test_results(group_id=group_id, teacher_id=group.teacher_id)
+
 
 
 def get_student_group_service(db: AsyncSession = Depends(get_db)) -> StudentGroupService:

@@ -50,6 +50,7 @@ class StudentGroupResponseSchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class StudentGroupCardSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -111,3 +112,59 @@ class GroupMemberTableItemSchema(BaseModel):
         if value.startswith("http"):
             return value
         return f"{BASE_URL}/{value}"
+
+
+class StudentGroupDetailCardSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    subject_name: str | None = None
+    description: str | None = None
+
+    students_count: int = Field(default=0, ge=0)
+    tests_count: int = Field(default=0, ge=0)
+    average_score: float = Field(default=0, ge=0, le=100)
+
+    last_activity: datetime | None = None
+    status: str
+
+    color: str | None = None
+    cover_image: str | None = None
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class GroupStudentPerformanceSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    student_id: int
+    full_name: str
+    profile_image: str | None = None
+
+    correct_answers: int = Field(default=0, ge=0)
+    wrong_answers: int = Field(default=0, ge=0)
+    tests_count: int = Field(default=0, ge=0)
+
+    average_score: float = Field(default=0, ge=0, le=100)
+
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str | None):
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
+
+
+class GroupTestResultItemSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    session_id: int
+    quiz_id: int
+    quiz_name: str
+
+    average_score: float = Field(default=0, ge=0, le=100)
+    completed_students: int = Field(default=0, ge=0)
+    total_students: int = Field(default=0, ge=0)
+    session_date: datetime | None = None
