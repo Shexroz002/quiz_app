@@ -7,9 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage, \
-    Quiz, User, Subject, StudentGroupMember
+    Quiz, User, StudentGroupMember
 from app.models.quiz.real_time_quiz import QuizSessionGroup
-from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
+from app.models.quiz.real_time_quiz.quiz_session import SessionStatus
 
 
 class QuizSessionRepository:
@@ -40,7 +40,7 @@ class QuizSessionRepository:
         await self.db.flush()
         return quiz_session
 
-    async def get_running_sessions_by_host(self,host_id:int):
+    async def get_running_sessions_by_host(self, host_id: int):
 
         stmt = (
             select(
@@ -223,7 +223,7 @@ class QuizSessionRepository:
         res = await self.db.execute(stmt)
         return res.mappings().all()
 
-    async def get_personal_quiz_session_history(self, user_id: int, search: str):
+    async def get_personal_quiz_session_history(self, user_id: int, search: str|None):
         participants_subq = (
             select(
                 SessionParticipant.session_id.label("session_id"),

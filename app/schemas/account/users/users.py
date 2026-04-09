@@ -108,8 +108,8 @@ class StudentTableItemSchema(BaseModel):
         description="O'quvchi F.I.Sh"
     )
 
-    class_name: str = Field(
-        default="1A maxsus",
+    group_names: list = Field(
+        default=["1A maxsus",],
         description="Sinf nomi"
     )
 

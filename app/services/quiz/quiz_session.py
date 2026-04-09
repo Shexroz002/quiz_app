@@ -811,6 +811,11 @@ class QuizSessionService:
         rank_list = await self.session_repo.get_session_participant_rank_list(session_id, session.host_id)
         return rank_list
 
+    async def get_student_dashboard_stats(self, teacher_id: int, student_id: int):
+
+        return await self.session_repo.student_dashboard_stats(teacher_id=teacher_id, student_id=student_id)
+
+
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db),
                              redis_client: Redis = Depends(get_redis_client)) -> QuizSessionService:
