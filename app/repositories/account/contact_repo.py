@@ -10,8 +10,9 @@ from app.models import Contact, User, QuizAttempt, QuizSession, SessionParticipa
     Question, Quiz, StudentGroupMember
 from app.models.quiz.real_time_quiz import QuizSessionGroup
 from app.repositories.base.base_repository import BaseRepository
-from app.schemas.account.users import StudentStatus
+from app.schemas.account.users import StudentStatus, TeacherStudentListParams
 from sqlalchemy.dialects.postgresql import ARRAY, array
+
 
 class ContactRepository(BaseRepository[Contact]):
 
@@ -77,7 +78,7 @@ class ContactRepository(BaseRepository[Contact]):
             .join(
                 teacher_groups_sq,
                 teacher_groups_sq.c.id == QuizSessionGroup.group_id,
-                )
+            )
             .subquery()
         )
 
@@ -94,7 +95,7 @@ class ContactRepository(BaseRepository[Contact]):
             .join(
                 StudentGroup,
                 StudentGroup.id == StudentGroupMember.group_id,
-                )
+            )
             .where(StudentGroup.teacher_id == teacher_id)
             .group_by(StudentGroupMember.student_id)
             .subquery()
@@ -114,7 +115,7 @@ class ContactRepository(BaseRepository[Contact]):
                     and_(
                         QuizAttempt.finished.is_(True),
                         QuizAttempt.total_questions > 0,
-                        ),
+                    ),
                     100.0 * QuizAttempt.score / QuizAttempt.total_questions,
                 ),
                 else_=None,
@@ -177,7 +178,7 @@ class ContactRepository(BaseRepository[Contact]):
             .outerjoin(
                 student_groups_sq,
                 student_groups_sq.c.student_id == User.id,
-                )
+            )
 
             # faqat teacher group sessionlari ichidagi participant
             .outerjoin(
@@ -187,18 +188,18 @@ class ContactRepository(BaseRepository[Contact]):
                     SessionParticipant.session_id.in_(
                         select(teacher_sessions_sq.c.session_id)
                     ),
-                    ),
+                ),
             )
             .outerjoin(
                 QuizSession,
                 QuizSession.id == SessionParticipant.session_id,
-                )
+            )
             .outerjoin(
                 QuizAttempt,
                 and_(
                     QuizAttempt.participant_id == SessionParticipant.id,
                     QuizAttempt.session_id == QuizSession.id,
-                    ),
+                ),
             )
             .where(Contact.user_id == teacher_id)
             .group_by(
@@ -250,22 +251,6 @@ class ContactRepository(BaseRepository[Contact]):
 
         result = await self.db.execute(stmt)
         return paginate(result.mappings().all())
-
-        # items = []
-        # for row in rows:
-        #     items.append({
-        #         "student_id": row["student_id"],
-        #         "username": row["username"],
-        #         "profile_image": row["profile_image"],
-        #         "full_name": row["full_name"],
-        #         "group_names": row["group_names"] or [],
-        #         "average_score": float(row["average_score"] or 0),
-        #         "tests_count": row["tests_count"] or 0,
-        #         "last_activity": row["last_activity"],
-        #         "status": row["status"],
-        #     })
-        #
-        # return paginate(items)
 
     async def is_my_contact(self, teacher_id: int, student_id: int) -> bool:
         stmt = select(Contact).where(Contact.user_id == teacher_id, Contact.friend_id == student_id)
@@ -469,7 +454,7 @@ class ContactRepository(BaseRepository[Contact]):
 
         return rows, overall
 
-    async def student_quiz_session_history(self,user_id: int,teacher_id: int,search: str | None ):
+    async def student_quiz_session_history(self, user_id: int, teacher_id: int, search: str | None):
         teacher_session_ids_sq = (
             select(QuizSessionGroup.session_id)
             .join(
@@ -558,3 +543,262 @@ class ContactRepository(BaseRepository[Contact]):
 
         result = await self.db.execute(stmt)
         return paginate(result.mappings().all())
+
+    async def teacher_students_leaderboard(self, teacher_id: int, filters: TeacherStudentListParams):
+        teacher_groups_sq = (
+            select(
+                StudentGroup.id.label("group_id"),
+                StudentGroup.name.label("group_name"),
+            )
+            .where(StudentGroup.teacher_id == teacher_id)
+            .subquery()
+        )
+        student_groups_sq = (
+            select(
+                StudentGroupMember.student_id.label("student_id"),
+                func.array_agg(
+                    distinct(teacher_groups_sq.c.group_name)
+                ).label("group_names"),
+            )
+            .select_from(StudentGroupMember)
+            .join(
+                teacher_groups_sq,
+                teacher_groups_sq.c.group_id == StudentGroupMember.group_id,
+            )
+            .group_by(StudentGroupMember.student_id)
+            .subquery()
+        )
+
+        teacher_sessions_sq = (
+            select(
+                distinct(QuizSessionGroup.session_id).label("session_id")
+            )
+            .join(
+                teacher_groups_sq,
+                teacher_groups_sq.c.group_id == QuizSessionGroup.group_id,
+            )
+            .subquery()
+        )
+
+        full_name_search_expr = func.trim(
+            func.concat(
+                func.coalesce(User.first_name, ""),
+                literal(" "),
+                func.coalesce(User.last_name, ""),
+            )
+        )
+        full_name_expr = full_name_search_expr.label("full_name")
+
+        average_score_raw = func.avg(
+            case(
+                (
+                    and_(
+                        QuizAttempt.finished.is_(True),
+                        QuizAttempt.total_questions > 0,
+                    ),
+                    100.0 * QuizAttempt.score / QuizAttempt.total_questions,
+                ),
+                else_=None,
+            )
+        )
+
+        average_score_expr = func.coalesce(
+            func.round(
+                cast(average_score_raw, Numeric(10, 2)),
+                2,
+            ),
+            0.0,
+        ).label("average_score")
+
+        tests_count_expr = func.coalesce(
+            func.count(distinct(QuizAttempt.id)).filter(
+                QuizAttempt.finished.is_(True)
+            ),
+            0,
+        ).label("tests_count")
+
+        last_activity_expr = func.max(
+            func.coalesce(
+                QuizAttempt.finished_at,
+                QuizSession.created_at,
+                SessionParticipant.joined_at,
+            )
+        ).label("last_activity")
+
+        # oddiy streak logika: oxirgi faollikdan necha kun bo'ldi
+        streak_days_expr = cast(
+            func.coalesce(
+                func.extract(
+                    "day",
+                    func.now() - func.max(
+                        func.coalesce(
+                            QuizAttempt.finished_at,
+                            QuizSession.created_at,
+                            SessionParticipant.joined_at,
+                        )
+                    ),
+                ),
+                0,
+            ),
+            Numeric,
+        ).label("streak_days")
+
+        status_expr = case(
+            (
+                last_activity_expr >= func.now() - text("INTERVAL '3 days'"),
+                literal("active"),
+            ),
+            else_=literal("inactive"),
+        ).label("status")
+
+        base_stmt = (
+            select(
+                User.id.label("student_id"),
+                User.username.label("username"),
+                User.first_name.label("first_name"),
+                User.last_name.label("last_name"),
+                User.profile_image.label("profile_image"),
+                full_name_expr,
+                student_groups_sq.c.group_names.label("group_names"),
+                average_score_expr,
+                tests_count_expr,
+                last_activity_expr,
+                cast(streak_days_expr, Numeric(10, 0)).label("streak_days"),
+                status_expr,
+            )
+            .select_from(student_groups_sq)
+            .join(User, User.id == student_groups_sq.c.student_id)
+            .outerjoin(
+                SessionParticipant,
+                and_(
+                    SessionParticipant.user_id == User.id,
+                    SessionParticipant.session_id.in_(
+                        select(teacher_sessions_sq.c.session_id)
+                    ),
+                ),
+            )
+            .outerjoin(
+                QuizSession,
+                QuizSession.id == SessionParticipant.session_id,
+            )
+            .outerjoin(
+                QuizAttempt,
+                and_(
+                    QuizAttempt.participant_id == SessionParticipant.id,
+                    QuizAttempt.session_id == QuizSession.id,
+                ),
+            )
+            .group_by(
+                User.id,
+                User.username,
+                User.first_name,
+                User.last_name,
+                User.profile_image,
+                student_groups_sq.c.group_names,
+            )
+        )
+
+        if filters.search:
+            search = f"%{filters.search}%"
+            base_stmt = base_stmt.where(
+                or_(
+                    User.first_name.ilike(search),
+                    User.last_name.ilike(search),
+                    full_name_search_expr.ilike(search),
+                    User.username.ilike(search),
+                )
+            )
+
+        if filters.min_score is not None:
+            base_stmt = base_stmt.having(average_score_expr >= filters.min_score)
+
+        if filters.max_score is not None:
+            base_stmt = base_stmt.having(average_score_expr <= filters.max_score)
+
+        if filters.status:
+            base_stmt = base_stmt.having(status_expr == filters.status)
+
+        leaderboard_cte = base_stmt.cte("leaderboard")
+
+        rank_expr = func.dense_rank().over(
+            order_by=(
+                leaderboard_cte.c.average_score.desc(),
+                leaderboard_cte.c.tests_count.desc(),
+                leaderboard_cte.c.last_activity.desc(),
+            )
+        ).label("rank")
+
+        final_stmt = select(
+            rank_expr,
+            leaderboard_cte.c.student_id,
+            leaderboard_cte.c.username,
+            leaderboard_cte.c.first_name,
+            leaderboard_cte.c.last_name,
+            leaderboard_cte.c.profile_image,
+            leaderboard_cte.c.full_name,
+            leaderboard_cte.c.group_names,
+            leaderboard_cte.c.average_score,
+            leaderboard_cte.c.tests_count,
+            leaderboard_cte.c.streak_days,
+            leaderboard_cte.c.last_activity,
+            leaderboard_cte.c.status,
+        )
+
+        ordering_map = {
+            "average_score": leaderboard_cte.c.average_score.asc(),
+            "-average_score": leaderboard_cte.c.average_score.desc(),
+            "tests_count": leaderboard_cte.c.tests_count.asc(),
+            "-tests_count": leaderboard_cte.c.tests_count.desc(),
+            "last_activity": leaderboard_cte.c.last_activity.asc(),
+            "-last_activity": leaderboard_cte.c.last_activity.desc(),
+            "full_name": leaderboard_cte.c.full_name.asc(),
+            "-full_name": leaderboard_cte.c.full_name.desc(),
+            "rank": rank_expr.asc(),
+            "-rank": rank_expr.desc(),
+        }
+        final_stmt = final_stmt.order_by(
+            rank_expr
+        )
+        if filters.ordering:
+            final_stmt = final_stmt.order_by(
+                ordering_map.get(
+                    filters.ordering
+                )
+            )
+
+        result = await self.db.execute(final_stmt)
+        return paginate(result.mappings().all())
+        # rows = result.mappings().all()
+        #
+        # items = []
+        # for row in rows:
+        #     rank = int(row["rank"])
+        #     crown_type = None
+        #     if rank == 1:
+        #         crown_type = "gold"
+        #     elif rank == 2:
+        #         crown_type = "silver"
+        #     elif rank == 3:
+        #         crown_type = "bronze"
+        #
+        #     items.append(
+        #         {
+        #             "rank": rank,
+        #             "student_id": row["student_id"],
+        #             "username": row["username"],
+        #             "first_name": row["first_name"],
+        #             "last_name": row["last_name"],
+        #             "full_name": row["full_name"],
+        #             "profile_image": row["profile_image"],
+        #             "group_names": row["group_names"] or [],
+        #             "average_score": float(row["average_score"] or 0),
+        #             "tests_count": int(row["tests_count"] or 0),
+        #             "streak_days": int(row["streak_days"] or 0),
+        #             "last_activity": row["last_activity"],
+        #             "status": row["status"],
+        #             "is_top_3": rank <= 3,
+        #             "crown_type": crown_type,
+        #         }
+        #     )
+        #
+        # return paginate(items)

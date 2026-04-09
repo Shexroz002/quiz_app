@@ -7,8 +7,10 @@ from starlette.responses import JSONResponse
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.api.v1.teacher.my_student.params.student_filter import StudentFilterParams
 from app.schemas.account.users import StudentTableItemSchema, UserShortInfoSchema, UserContactListSchema, \
-    StudentCardResponse, WeakTopicItemResponse, SubjectStatsResponse
+    StudentCardResponse, WeakTopicItemResponse, SubjectStatsResponse, TeacherStudentLeaderboardItem, \
+    TeacherStudentListParams
 from app.schemas.quiz.quiz_session import SessionLeaderboardRow
+from app.services.account import contact_service
 from app.services.account.contact_service import get_contact_service, ContactService
 
 from app.models import User
@@ -67,11 +69,16 @@ async def subjects_stat(student_id: int, contact_service: ContactService = Depen
                         current_user: User = Depends(get_current_user)):
     return await contact_service.get_student_subject_stats(teacher_id=current_user.id, student_id=student_id)
 
+
 @my_student_router.get("/{student_id}/history", response_model=Page[SessionLeaderboardRow])
 async def student_session_history(student_id: int, contact_service: ContactService = Depends(get_contact_service),
-                        current_user: User = Depends(get_current_user)):
+                                  current_user: User = Depends(get_current_user)):
     return await contact_service.student_quiz_session_history(teacher_id=current_user.id, student_id=student_id)
 
 
-
-
+@my_student_router.get('/leaderboard', response_model=Page[TeacherStudentLeaderboardItem])
+async def teacher_students_leaderboard(
+        filters: TeacherStudentListParams = Depends(),
+        contact_service: ContactService = Depends(get_contact_service),
+        current_user: User = Depends(get_current_user)):
+    return await contact_service.get_teacher_students_leaderboard(current_user.id, filters)

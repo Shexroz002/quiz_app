@@ -7,6 +7,7 @@ from app.api.v1.teacher.my_student.params.student_filter import StudentFilterPar
 from app.core.database.base import get_db
 from app.repositories.account import ContactRepository, UserRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
+from app.schemas.account.users import TeacherStudentListParams
 
 
 class ContactService:
@@ -66,10 +67,13 @@ class ContactService:
             "items": rows,
         }
 
-    async def student_quiz_session_history(self, teacher_id, student_id,search: str | None = None):
+    async def student_quiz_session_history(self, teacher_id, student_id, search: str | None = None):
         if not await self.repo.is_my_contact(teacher_id, student_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
-        return await self.repo.student_quiz_session_history(student_id, teacher_id,search)
+        return await self.repo.student_quiz_session_history(student_id, teacher_id, search)
+
+    async def get_teacher_students_leaderboard(self, teacher_id: int, filters: TeacherStudentListParams):
+        return await self.repo.teacher_students_leaderboard(teacher_id, filters)
 
 
 def get_contact_service(db: AsyncSession = Depends(get_db)) -> ContactService:
