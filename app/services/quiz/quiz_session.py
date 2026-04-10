@@ -22,6 +22,7 @@ from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest, AnswerItem
 from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
 from app.schemas.sessions.session_monitoring import ParticipantLiveStatus, ConnectionStatus
+from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
 from app.services.notification.notification_service import get_notification_service
 from app.services.redis_service.session_live import SessionLiveStateService
 from app.websocket import session_ws_manager, session_monitoring_ws_manager
@@ -762,7 +763,7 @@ class QuizSessionService:
             host_id=host_id,
         )
 
-    async def student_session_result_details(self, session_id: int, group_id:int, member_id: int):
+    async def student_session_result_details(self, session_id: int, group_id: int, member_id: int):
         session = await self.session_repo.get_by_id(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -778,7 +779,6 @@ class QuizSessionService:
             session_id=session_id,
             host_id=session.host_id,
         )
-
 
     async def student_session_question_accuracy(self, session_id: int, group_id, member_id: int):
         session = await self.session_repo.get_by_id(session_id)
@@ -811,9 +811,23 @@ class QuizSessionService:
         rank_list = await self.session_repo.get_session_participant_rank_list(session_id, session.host_id)
         return rank_list
 
-    async def get_student_dashboard_stats(self, teacher_id: int, student_id: int):
+    async def get_teacher_overview_cards(self, teacher_id: int):
+        return await self.session_repo.teacher_overview_cards(teacher_id)
 
-        return await self.session_repo.student_dashboard_stats(teacher_id=teacher_id, student_id=student_id)
+    async def get_teacher_activity_chart(self, teacher_id: int):
+        return await self.session_repo.teacher_activity_chart(teacher_id)
+
+    async def get_teacher_analytics_overview(self, teacher_id: int):
+        return await self.session_repo.teacher_analytics_overview(teacher_id)
+
+    async def get_teacher_group_results(self, teacher_id: int):
+        return await self.session_repo.teacher_group_results(teacher_id)
+
+    async def get_teacher_weak_topics(self, teacher_id: int):
+        return await self.session_repo.teacher_weak_topics(teacher_id)
+
+    async def get_teacher_weak_students(self, teacher_id: int,filters: WeakStudentsFilterParams,):
+        return await self.session_repo.teacher_weak_students(teacher_id,filters)
 
 
 

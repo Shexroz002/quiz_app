@@ -6,7 +6,7 @@ from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models.group.student_group import GroupColor
 from app.schemas.group.student_group import StudentGroupResponseSchema, StudentGroupCreateSchema, \
     StudentGroupUpdateSchema, StudentGroupCardSchema, GroupCoverImageResponseSchema, GroupMemberTableItemSchema, \
-    StudentGroupDetailCardSchema, GroupStudentPerformanceSchema, GroupTestResultItemSchema
+    StudentGroupDetailCardSchema, GroupStudentPerformanceSchema, GroupTestResultItemSchema, StudentGroupCardBaseSchema
 from app.services.group.student_group_service import get_student_group_service, StudentGroupService
 
 student_group_router = APIRouter(prefix="", )
@@ -120,7 +120,12 @@ async def list_groups(
 ):
     return await service.list_groups(current_user.id, search=search, subject_id=subject_id)
 
-
+@student_group_router.get("/short", response_model=Page[StudentGroupCardBaseSchema])
+async def list_groups_short(
+        current_user=Depends(get_current_user),
+        service: StudentGroupService = Depends(get_student_group_service),
+):
+    return await service.group_short_info(current_user.id)
 @student_group_router.get("/{group_id}/detail-card", response_model=StudentGroupDetailCardSchema)
 async def get_group_detail_card(
         group_id: int,

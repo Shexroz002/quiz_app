@@ -105,6 +105,18 @@ class StudentGroupRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
 
+    async def list_groups_short_info(self, teacher_id: int):
+        stmt = (
+            select(
+                StudentGroup.id.label("id"),
+                StudentGroup.name.label("name"),
+            )
+            .where(StudentGroup.teacher_id == teacher_id)
+            .order_by(StudentGroup.name.asc())
+        )
+        result = await self.db.execute(stmt)
+        return paginate(result.mappings().all())
+
     async def list_groups(self, teacher_id: int | None = None, search: str | None = None,
                           subject_id: int | None = None, member_id: int | None = None):
         students_count_expr = func.count(

@@ -51,11 +51,15 @@ class StudentGroupResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class StudentGroupCardSchema(BaseModel):
+class StudentGroupCardBaseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
+
+
+class StudentGroupCardSchema(StudentGroupCardBaseSchema):
+    model_config = ConfigDict(from_attributes=True)
     subject_name: str | None = None
     description: str | None = None
     students_count: int = 0
@@ -131,6 +135,7 @@ class StudentGroupDetailCardSchema(BaseModel):
 
     color: str | None = None
     cover_image: str | None = None
+
 
 from pydantic import BaseModel, ConfigDict, Field
 

@@ -93,6 +93,9 @@ class StudentGroupService:
     async def list_groups(self, teacher_id: int, search: str | None = None, subject_id: int | None = None):
         return await self.repo.list_groups(teacher_id, search, subject_id)
 
+    async def group_short_info(self,teacher_id:int):
+        return await self.repo.list_groups_short_info(teacher_id)
+
     @staticmethod
     async def upload_image(teacher_id: int, image: UploadFile):
 

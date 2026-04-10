@@ -232,3 +232,22 @@ class SessionQuestionAccuracyItemSchema(BaseModel):
         ...,
         description="Savol darajasi: easy, medium, hard"
     )
+
+class DashboardMetricItem(BaseModel):
+    value: int | float
+    change_percent: int
+    trend: str
+    label: str
+
+    @field_serializer("value")
+    def serialize_value(self, value):
+        if isinstance(value, float):
+            return round(value, 2)
+        return value
+
+
+class TeacherOverviewResponse(BaseModel):
+    total_students: DashboardMetricItem
+    completed_tests_this_week: DashboardMetricItem
+    average_score_this_week: DashboardMetricItem
+    active_students_this_week: DashboardMetricItem
