@@ -11,7 +11,7 @@ class SubmitAnswerRequest(BaseModel):
 
 class AnswerItem(BaseModel):
     question_id: int
-    selected_option: str = Field(..., pattern="^[ABCD]$")
+    selected_option: str = Field(...,)
 
 class SubmitAnswerResponse(BaseModel):
     question_id: int

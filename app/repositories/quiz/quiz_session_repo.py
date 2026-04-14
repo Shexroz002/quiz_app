@@ -12,7 +12,7 @@ from app.models.quiz.real_time_quiz import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionStatus
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
 
-
+UZT = timezone(timedelta(hours=5))
 class QuizSessionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -80,7 +80,7 @@ class QuizSessionRepository:
         return result.mappings().all()
 
     async def start_session(self, quiz_session: QuizSession) -> QuizSession:
-        now = datetime.now(UTC)
+        now = datetime.now(UZT).replace(tzinfo=None)
         quiz_session.status = SessionStatus.running
         quiz_session.started_at = now
         quiz_session.finished_at = now + timedelta(minutes=quiz_session.duration_minutes)

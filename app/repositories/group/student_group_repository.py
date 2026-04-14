@@ -1,7 +1,7 @@
 from typing import List
 
 from fastapi_pagination import paginate
-from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case, or_
+from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case, or_, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -209,7 +209,13 @@ class StudentGroupRepository:
             stmt = stmt.where(StudentGroup.teacher_id == teacher_id)
 
         if member_id is not None:
-            stmt = stmt.where(StudentGroupMember.student_id == member_id)
+            stmt = stmt.where(
+                StudentGroup.id.in_(
+                    select(StudentGroupMember.group_id).where(
+                        StudentGroupMember.student_id == member_id
+                    )
+                )
+            )
 
         if search:
             stmt = stmt.where(StudentGroup.name.ilike(f"%{search.strip()}%"))

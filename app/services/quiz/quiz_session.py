@@ -425,6 +425,8 @@ class QuizSessionService:
         await self.db.commit()
         await self.db.refresh(quiz_session)
         questions = await self.question_repo.list_with_details(quiz_id, user.id)
+        print("Result", quiz_session.started_at)
+        print("Result", quiz_session.finished_at)
         return {
             "session_id": quiz_session.id,
             "quiz_id": quiz_id,
