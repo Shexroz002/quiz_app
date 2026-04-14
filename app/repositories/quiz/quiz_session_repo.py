@@ -41,6 +41,19 @@ class QuizSessionRepository:
         await self.db.flush()
         return quiz_session
 
+    async def finish_session(self, session_id: int) -> QuizSession | None:
+        stmt = select(QuizSession).where(QuizSession.id == session_id)
+        result = await self.db.execute(stmt)
+        quiz_session = result.scalar_one_or_none()
+
+        if quiz_session:
+            now = datetime.now(UTC)
+            quiz_session.status = SessionStatus.finished
+            quiz_session.finished_at = now
+            await self.db.flush()
+
+        return quiz_session
+
     async def get_running_sessions_by_host(self, host_id: int):
 
         stmt = (
@@ -101,12 +114,7 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return result.mappings().first()
 
-    async def player_session(
-            self,
-            session_id: int,
-            host_id: int | None = None,
-            status=SessionStatus.running,
-    ):
+    async def player_session(self, session_id: int, host_id: int | None = None, status=SessionStatus.running):
         stmt = (
             select(QuizSession)
             .where(
@@ -121,11 +129,7 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    async def get_session_questions_with_answers(
-            self,
-            session_id: int,
-            host_id: int,
-    ):
+    async def get_session_questions_with_answers(self, session_id: int, host_id: int):
 
         sp_id_sq = (
             select(SessionParticipant.id)
@@ -380,11 +384,7 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return paginate(result.mappings().all())
 
-    async def get_teacher_session_results_detail(
-            self,
-            session_id: int,
-            host_id: int | None = None,
-    ):
+    async def get_teacher_session_results_detail(self, session_id: int, host_id: int | None = None):
         attempt_percentage_expr = case(
             (
                 QuizAttempt.total_questions > 0,
@@ -576,11 +576,7 @@ class QuizSessionRepository:
             ),
         }
 
-    async def get_session_question_accuracy(
-            self,
-            session_id: int,
-            host_id: int | None = None,
-    ):
+    async def get_session_question_accuracy(self, session_id: int, host_id: int | None = None):
         question_order_subq = (
             select(
                 Question.id.label("question_id"),
@@ -667,11 +663,7 @@ class QuizSessionRepository:
             for row in rows
         ]
 
-    async def is_user_in_session_groups(
-            self,
-            session_id: int,
-            user_id: int,
-    ) -> bool:
+    async def is_user_in_session_groups(self, session_id: int, user_id: int) -> bool:
         stmt = select(
             exists().where(
                 and_(

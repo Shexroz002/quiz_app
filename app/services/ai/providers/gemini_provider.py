@@ -7,8 +7,11 @@ from typing import Optional
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ServerError
+
 from app.services.ai.base import AIProvider, AIQuizParseRequest, ProgressCb, AIQuizParseResult
 
+RETRYABLE_STATUS_CODES = {500, 503}
 
 class GeminiProvider(AIProvider):
     name = "gemini"
@@ -174,41 +177,188 @@ class GeminiProvider(AIProvider):
                     )
 
     async def generate_quiz_from_description(
-            self,
-            req: AIQuizParseRequest,
-            progress: Optional[ProgressCb] = None,
-            timeout_sec: int = 120,
+        self,
+        req: AIQuizParseRequest,
+        progress: Optional[ProgressCb] = None,
+        timeout_sec: int = 120,
     ) -> AIQuizParseResult:
+        max_retries = 3
+        last_error: Exception | None = None
+
         if progress:
             await progress(50, "Sizing so'rovingiz AIga jo'natilmoqda", "")
 
+        for attempt in range(1, max_retries + 1):
+            try:
+                if progress:
+                    await progress(
+                        65,
+                        f"AI savollar yaratmoqda... ({attempt}/{max_retries})",
+                        ""
+                    )
+
+                # sync generate_content ni timeout bilan thread ichida ishlatamiz
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.client.models.generate_content,
+                        model=self.model,
+                        contents=[
+                            types.Part.from_text(text=req.prompt)
+                        ],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=req.schema,
+                            temperature=0.1,
+                        ),
+                    ),
+                    timeout=timeout_sec,
+                )
+
+                raw_text = getattr(response, "text", None)
+                if not raw_text:
+                    raise ValueError("AI bo'sh javob qaytardi.")
+
+                if progress:
+                    await progress(75, "AIdan testlar olindi.", "")
+
+                data = json.loads(raw_text)
+
+                if progress:
+                    await progress(80, "AI javobi olindi", "")
+
+                return AIQuizParseResult(
+                    data=data,
+                    raw_text=raw_text,
+                    provider=self.name,
+                    model=self.model,
+                )
+
+            except ServerError as e:
+                last_error = e
+                status_code = getattr(e, "status_code", None)
+
+                # faqat retry qilinadigan server xatolari
+                if status_code in RETRYABLE_STATUS_CODES and attempt < max_retries:
+                    delay = 2 ** (attempt - 1)  # 1, 2, 4 sekund
+
+                    if progress:
+                        await progress(
+                            70,
+                            f"AI serverida vaqtinchalik xato ({status_code}). "
+                            f"Qayta urinilmoqda... ({attempt}/{max_retries})",
+                            str(e),
+                        )
+
+                    await asyncio.sleep(delay)
+                    continue
+
+                # oxirgi urinish ham yiqilsa websocketga failed yuboramiz
+                if progress:
+                    await progress(
+                        100,
+                        "AI xizmatida xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.",
+                        f"ServerError {status_code}: {str(e)}",
+                    )
+
+                raise ValueError(
+                    f"AI server xatoligi. "
+                    f"Status: {status_code}. "
+                    f"3 marta urinildi, lekin muvaffaqiyatsiz tugadi. "
+                    f"Original error: {str(e)}"
+                ) from e
+
+            except asyncio.TimeoutError as e:
+                last_error = e
+
+                if attempt < max_retries:
+                    delay = 2 ** (attempt - 1)
+
+                    if progress:
+                        await progress(
+                            70,
+                            f"AI javobi juda sekin kelmoqda. Qayta urinilmoqda... ({attempt}/{max_retries})",
+                            "Timeout",
+                        )
+
+                    await asyncio.sleep(delay)
+                    continue
+
+                if progress:
+                    await progress(
+                        100,
+                        "AI javobi kelmadi. Iltimos, keyinroq qayta urinib ko'ring.",
+                        "TimeoutError",
+                    )
+
+                raise ValueError(
+                    "AI javobi timeout bo'ldi. 3 marta urinildi, lekin javob kelmadi."
+                ) from e
+
+            except Exception as e:
+                # bu yerda JSON parse xatosi yoki boshqa ichki xatolar
+                last_error = e
+
+                if progress:
+                    await progress(
+                        100,
+                        "AI javobini qayta ishlashda xatolik yuz berdi.",
+                        str(e),
+                    )
+
+                raise ValueError(
+                    f"AI javobini qayta ishlashda xatolik: {str(e)}"
+                ) from e
+
+        # nazariy fallback
         if progress:
-            await progress(65, "AI savollar yaratmoqda...", "")
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=[
-                types.Part.from_text(text=req.prompt)
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=req.schema,
-                temperature=0.1,
-            ),
-        )
-        raw_text = getattr(response, "text", None)
-        try:
-            if progress:
-                await progress(75, "AIdan testlar olindi.", "")
-            data = json.loads(raw_text)
-
-            if progress:
-                await progress(80, "AI javobi olindi", "")
-
-            return AIQuizParseResult(
-                data=data,
-                raw_text=raw_text,
-                provider=self.name,
-                model=self.model,
+            await progress(
+                100,
+                "AI bilan ishlashda noma'lum xatolik yuz berdi.",
+                str(last_error) if last_error else "",
             )
-        except Exception as e:
-            raise ValueError(f"AI javobini qayta ishlashda xatolik: {str(e)}\nRaw response: {response.text}") from e
+
+        raise ValueError(
+            f"AI generate xatosi: {str(last_error) if last_error else 'Unknown error'}"
+        )
+
+    # async def generate_quiz_from_description(
+    #         self,
+    #         req: AIQuizParseRequest,
+    #         progress: Optional[ProgressCb] = None,
+    #         timeout_sec: int = 120,
+    # ) -> AIQuizParseResult:
+    #     if progress:
+    #         await progress(50, "Sizing so'rovingiz AIga jo'natilmoqda", "")
+    #
+    #     if progress:
+    #         await progress(65, "AI savollar yaratmoqda...", "")
+    #     response = self.client.models.generate_content(
+    #         model=self.model,
+    #         contents=[
+    #             types.Part.from_text(text=req.prompt)
+    #         ],
+    #         config=types.GenerateContentConfig(
+    #             response_mime_type="application/json",
+    #             response_schema=req.schema,
+    #             temperature=0.1,
+    #         ),
+    #     )
+    #     # check if response status code =500 and retry 2 times with exponential backoff
+    #
+    #     raw_text = getattr(response, "text", None)
+    #     try:
+    #         if progress:
+    #             await progress(75, "AIdan testlar olindi.", "")
+    #         data = json.loads(raw_text)
+    #
+    #         if progress:
+    #             await progress(80, "AI javobi olindi", "")
+    #
+    #         return AIQuizParseResult(
+    #             data=data,
+    #             raw_text=raw_text,
+    #             provider=self.name,
+    #             model=self.model,
+    #         )
+    #     except Exception as e:
+    #         raise ValueError(f"AI javobini qayta ishlashda xatolik: {str(e)}\nRaw response: {response.text}") from e

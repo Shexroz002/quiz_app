@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from fastapi_pagination import paginate
-from sqlalchemy import select, and_, text, or_, cast, Numeric, literal, case
+from sqlalchemy import select, and_, text, or_, cast, Numeric, literal, case, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.functions import func
@@ -516,3 +516,36 @@ class QuizRepository:
             "highest_score": float(row["highest_score"] or 0),
             "champions_count": int(row["champions_count"] or 0),
         }
+
+    async def has_all_correct_options(self, quiz_id: int) -> bool:
+        """
+        Check if every question in the quiz has at least one correct option.
+
+        Returns:
+            True  -> if all questions have at least one correct option
+            False -> if at least one question has no correct option
+        """
+        total_questions_stmt = (
+            select(func.count(Question.id))
+            .where(Question.quiz_id == quiz_id)
+        )
+
+        questions_with_correct_option_stmt = (
+            select(func.count(distinct(Question.id)))
+            .select_from(Question)
+            .join(Option, Option.question_id == Question.id)
+            .where(
+                Question.quiz_id == quiz_id,
+                Option.is_correct.is_(True),
+            )
+        )
+
+        total_questions = (await self.db.execute(total_questions_stmt)).scalar() or 0
+        questions_with_correct_option = (
+                                            await self.db.execute(questions_with_correct_option_stmt)
+                                        ).scalar() or 0
+
+        if total_questions == 0:
+            return False
+
+        return total_questions == questions_with_correct_option

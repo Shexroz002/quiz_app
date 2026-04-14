@@ -38,8 +38,8 @@ class ContactService:
         await self.db.commit()
         return data
 
-    async def contact_list(self, contact_user_id: int):
-        return await self.repo.contact_list(contact_user_id)
+    async def contact_list(self, contact_user_id: int, search: str | None = None):
+        return await self.repo.contact_list(contact_user_id,search)
 
     async def contact_suggestions(self, contact_user_id: int, search: str | None = None):
         return await self.repo.contact_suggestions(contact_user_id, search)

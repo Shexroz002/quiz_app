@@ -82,6 +82,9 @@ class QuizSessionService:
         if not quiz:
             raise HTTPException(status_code=404, detail="Quiz not found")
 
+        if not await self.quiz_repo.has_all_correct_options(quiz_session_data.quiz_id):
+            raise HTTPException(status_code=404, detail="Ba'zi savollarda to‘g‘ri javob belgilanmagan.")
+
         join_code = await self._generate_unique_join_code()
 
         quiz_session = await self.session_repo.create(
@@ -437,7 +440,7 @@ class QuizSessionService:
         if not is_session_user:
             raise HTTPException(status_code=403, detail="User is not a participant of this session")
 
-        quiz_session = await self.session_repo.get_single_player_session(session_id, status="running")
+        quiz_session = await self.session_repo.get_single_player_session(session_id)
         if quiz_session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -453,7 +456,7 @@ class QuizSessionService:
         }
 
     async def get_single_player_quiz_info(self, session_id: int, user_id: int, is_question=True, status="running"):
-        quiz_session = await self.session_repo.get_single_player_session(session_id, host_id=None, status=status)
+        quiz_session = await self.session_repo.get_single_player_session(session_id, host_id=None)
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -580,7 +583,10 @@ class QuizSessionService:
     async def create_group_session(self, quiz_session_data: GroupQuizSessionCreate, user: User):
         quiz = await self.quiz_repo.get(quiz_session_data.quiz_id, user.id)
         if not quiz:
-            raise HTTPException(status_code=404, detail="Quiz not found")
+            raise HTTPException(status_code=404, detail="Test topilmadi!s")
+
+        if not await self.quiz_repo.has_all_correct_options(quiz_session_data.quiz_id):
+            raise HTTPException(status_code=404, detail="Ba'zi savollarda to‘g‘ri javob belgilanmagan.")
 
         join_code = await self._generate_unique_join_code()
         quiz_session = await self.session_repo.create(
@@ -682,7 +688,7 @@ class QuizSessionService:
 
         if not live_state:
             full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
-            live_state = await self.live_state_service.create_or_get_initial_state(
+            await self.live_state_service.create_or_get_initial_state(
                 session_id=session_id,
                 participant_id=participant.id,
                 user_id=user.id,

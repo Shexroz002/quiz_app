@@ -30,8 +30,32 @@ class ContactRepository(BaseRepository[Contact]):
         self.db.add(contact)
         return contact
 
-    async def contact_list(self, contact_user_id: int) -> Sequence[Contact]:
-        stmt = select(Contact).options(selectinload(Contact.friend)).where(Contact.user_id == contact_user_id)
+    async def contact_list(self, contact_user_id: int,search:str|None=None) -> Sequence[Contact]:
+        stmt = (
+            select(Contact)
+            .options(selectinload(Contact.friend))
+            .join(User, User.id == Contact.friend_id)
+            .where(Contact.user_id == contact_user_id)
+        )
+
+        if search:
+            search = f"%{search}%"
+
+            full_name_expr = func.concat(
+                func.coalesce(User.first_name, ""),
+                " ",
+                func.coalesce(User.last_name, "")
+            )
+
+            stmt = stmt.where(
+                or_(
+                    User.first_name.ilike(search),
+                    User.last_name.ilike(search),
+                    User.username.ilike(search),
+                    full_name_expr.ilike(search),
+                )
+            )
+
         result = await self.db.execute(stmt)
         return paginate(result.scalars().all())
 
