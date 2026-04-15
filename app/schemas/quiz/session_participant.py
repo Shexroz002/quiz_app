@@ -1,6 +1,9 @@
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
 
+from app.schemas.quiz.question import BASE_URL
+
+
 class SessionParticipantCreate(BaseModel):
     user_id: int
     nickname: str
@@ -21,7 +24,6 @@ class SessionParticipantList(BaseModel):
 
     @field_serializer("profile_image")
     def add_base_url(self, value: str):
-        BASE_URL = 'http://localhost:8000'
         if value is None:
             return value
         if value.startswith("http"):
