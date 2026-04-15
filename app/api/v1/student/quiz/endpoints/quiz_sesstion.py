@@ -185,10 +185,11 @@ async def topic_statistic(
 @quiz_session_router.post("/{quiz_id}/start-single-player/", response_model=StartSessionSinglePlayerBaseResponse)
 async def start_single_player_quiz(
         quiz_id: int,
+        duration_minute: int = Query(30, gt=0),
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.start_single_player_quiz(quiz_id, current_user)
+    return await quiz_session.start_single_player_quiz(quiz_id, current_user,duration_minute)
 
 
 @quiz_session_router.get("/{session_id}/start-single-player/info", response_model=StartSessionSinglePlayerResponse)
