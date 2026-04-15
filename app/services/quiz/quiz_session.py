@@ -98,7 +98,7 @@ class QuizSessionService:
         )
 
         # Host is always the first participant.
-        await self.participant_repo.create(
+        current_participant = await self.participant_repo.create(
             {
                 "session_id": quiz_session.id,
                 "nickname": user.username,
@@ -119,6 +119,8 @@ class QuizSessionService:
             "questions_count": 30,  # TODO: get real question count for quiz
             "started_at": quiz_session.started_at,
             "finished_at": quiz_session.finished_at,
+            "session_type": quiz_session.session_type,
+            "current_participant_id":current_participant.id
         }
         return result
 
