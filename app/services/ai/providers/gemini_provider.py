@@ -90,9 +90,9 @@ class GeminiProvider(AIProvider):
                                 min(55 + attempt * 5, 75),
                                 f"Qayta urinilmoqda ({attempt}/{max_retries})",
                                 "")
-
+                    model_name  = self.model if attempt!=max_retries else "gemini-2.5-flash-lite"
                     response = self.client.models.generate_content(
-                        model=self.model,
+                        model=model_name,
                         contents=[
                             types.Part.from_text(text=req.prompt),
                             uploaded_file,
@@ -201,7 +201,7 @@ class GeminiProvider(AIProvider):
                 response = await asyncio.wait_for(
                     asyncio.to_thread(
                         self.client.models.generate_content,
-                        model=self.model,
+                        model="gemini-2.5-flash-lite",
                         contents=[
                             types.Part.from_text(text=req.prompt)
                         ],

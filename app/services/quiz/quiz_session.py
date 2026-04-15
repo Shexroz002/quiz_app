@@ -16,7 +16,7 @@ from app.repositories.group.student_group_repository import StudentGroupReposito
 from app.repositories.quiz.question_repo import QuestionRepository
 from app.repositories.quiz.quiz_attempt_repo import QuizAttemptRepository
 from app.repositories.quiz.quiz_repo import QuizRepository
-from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
+from app.repositories.quiz.quiz_session_repo import QuizSessionRepository, UZT
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest, AnswerItem
@@ -126,6 +126,27 @@ class QuizSessionService:
         sessions = await self.session_repo.get_running_sessions_by_host(host_id)
         return sessions
 
+    async def finish_quiz_by_host(self, session_id: int, user_id: int):
+        current_session = await self.session_repo.get_by_id(session_id)
+        if not current_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if current_session.host_id != user_id:
+            raise HTTPException(status_code=403, detail="Faqat host foydalanuvchi sessiyani tugatishi mumkin!")
+
+        await self.session_repo.finish_session(current_session)
+        await self.db.commit()
+        await session_ws_manager.broadcast(
+            session_id=session_id,
+            event="session_finished",
+            payload={
+                "message":"Sessiya host tomonidan tugatildi!",
+            }
+        )
+        await self.db.refresh(current_session)
+
+
+
     async def join_quiz_session(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
         if not quiz_session:
@@ -141,12 +162,15 @@ class QuizSessionService:
 
         is_participant = await self.participant_repo.is_participant(quiz_session.id, user.id)
         if not is_participant:
+            now = datetime.now(UZT).replace(tzinfo=None)
+            joined_at = now
             is_participant = await self.participant_repo.create(
                 {
                     "session_id": quiz_session.id,
                     "nickname": user.username,
                     "user_id": user.id,
                     "is_host": False,
+                    "joined_at":joined_at
                 }
             )
             await self.db.commit()
@@ -309,6 +333,8 @@ class QuizSessionService:
         )
 
         attempt.finished = True
+        now = datetime.now(UZT).replace(tzinfo=None)
+        attempt.finished_at = now
         result = await self._build_attempt_result(
             session_id=session_id,
             quiz_id=session.quiz_id,
@@ -425,8 +451,6 @@ class QuizSessionService:
         await self.db.commit()
         await self.db.refresh(quiz_session)
         questions = await self.question_repo.list_with_details(quiz_id, user.id)
-        print("Result", quiz_session.started_at)
-        print("Result", quiz_session.finished_at)
         return {
             "session_id": quiz_session.id,
             "quiz_id": quiz_id,

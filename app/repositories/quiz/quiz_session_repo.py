@@ -13,6 +13,8 @@ from app.models.quiz.real_time_quiz.quiz_session import SessionStatus
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
 
 UZT = timezone(timedelta(hours=5))
+
+
 class QuizSessionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -41,16 +43,11 @@ class QuizSessionRepository:
         await self.db.flush()
         return quiz_session
 
-    async def finish_session(self, session_id: int) -> QuizSession | None:
-        stmt = select(QuizSession).where(QuizSession.id == session_id)
-        result = await self.db.execute(stmt)
-        quiz_session = result.scalar_one_or_none()
-
-        if quiz_session:
-            now = datetime.now(UTC)
-            quiz_session.status = SessionStatus.finished
-            quiz_session.finished_at = now
-            await self.db.flush()
+    async def finish_session(self, quiz_session: QuizSession) -> QuizSession:
+        now = datetime.now(UZT).replace(tzinfo=None)
+        quiz_session.status = SessionStatus.finished
+        quiz_session.finished_at = now
+        await self.db.flush()
 
         return quiz_session
 
@@ -118,8 +115,7 @@ class QuizSessionRepository:
         stmt = (
             select(QuizSession)
             .where(
-                QuizSession.id == session_id,
-                QuizSession.status == status,
+                QuizSession.id == session_id
             )
         )
 

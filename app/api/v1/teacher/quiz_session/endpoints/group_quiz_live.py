@@ -37,6 +37,15 @@ async def quiz_session_create(
 ):
     return await quiz_session.create_group_session(quiz_session_data, current_user)
 
+@quiz_group_session_router.get("/{session_id}/finish-by-host",status_code=200)
+async def quiz_session_finish_by_host(
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    await quiz_session.finish_quiz_by_host(session_id, current_user.id)
+    return {"detail": "Session finished successfully"}
+
 
 @quiz_group_session_router.get("/", response_model=List[LiveQuizCardSchema])
 async def get_running_sessions(

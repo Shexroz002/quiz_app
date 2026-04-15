@@ -49,16 +49,16 @@ Before returning the result, internally ensure the JSON is syntactically valid.
 OUTPUT JSON STRUCTURE:
 
 {
-  "quiz_title": "Fizika Testi",
-  "subject": "physics",
-  "description": "Bu fizika fanidan test savollari to‘plami.",
+  "quiz_title": "...",
+  "subject": "...",
+  "description": "...",
   "questions": [
     {
       "id": 1,
       "question": "Quyidagi formulani tanlang: $E=mc^2$",
       "images": ["[image_1]"],
-      "subject": "physics",
-      "table_markdown": "",
+      "subject": "...",
+      "table_markdown": "...",
       "options": [
         {
           "id": "A",
@@ -73,7 +73,7 @@ OUTPUT JSON STRUCTURE:
       ],
       "meta": {
         "difficulty": "oson",
-        "topic": "Nisbiylik"
+        "topic": "..."
       }
     }
   ]
