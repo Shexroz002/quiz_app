@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import HTTPException, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 import time
@@ -37,31 +39,32 @@ class UserService(BaseService):
 
     async def upload_avatar(self, user_id: int, avatar: UploadFile):
         user = await self.repo.get(user_id)
-
         if not user:
-            raise HTTPException(404, "User not found")
+            raise HTTPException(status_code=404, detail="User not found")
 
-        # Faqat rasm formatlarini qabul qilish
-        allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+        allowed_types = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
         if avatar.content_type not in allowed_types:
-            raise HTTPException(400, "Faqat rasm fayllari qabul qilinadi")
+            raise HTTPException(status_code=400, detail="Only jpg, png, webp allowed")
 
-        ext = Path(avatar.filename).suffix.lower()
-        upload_dir = Path("media/avatars")
+        upload_dir = Path("/home/quiz_app/media/avatars")
         upload_dir.mkdir(parents=True, exist_ok=True)
-        unique_filename = f"{user_id}_{int(time.time())}_{random.randint(1000, 9999)}{ext}"
-        file_path = str(upload_dir / f"{unique_filename}")
 
-        # Faylni to'g'ri saqlash
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(avatar.file, buffer)
+        ext = allowed_types[avatar.content_type]
+        filename = f"{user_id}_{uuid4().hex}{ext}"
+        file_path = upload_dir / filename
 
-        update_data = {
-            "profile_image": file_path
+        content = await avatar.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        profile_image = f"/media/avatars/{filename}"
+
+        await self.repo.update(user, {"profile_image": profile_image})
+
+        return {
+            "msg": "Avatar uploaded",
+            "profile_image": profile_image,
         }
-        await self.repo.update(user, update_data)
-
-        return {"msg": "Avatar uploaded", "profile_image": file_path}
 
     async def get_by_username(self, username: str):
         return await self.repo.get_by_username(username)
