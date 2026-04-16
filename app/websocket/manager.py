@@ -75,12 +75,24 @@ class SessionConnectionManager:
             event: str,
             payload: dict[str, Any] | None = None,
     ) -> None:
-        """Publish to Redis — all workers (including this one) receive it via Pub/Sub."""
-        message = json.dumps({"event": event, "data": payload or {}})
-        await self._redis.publish(self._channel(session_id), message)
+        message = {
+            "event": event,
+            "data": payload or {},
+            "worker_id": WORKER_ID,
+        }
+        raw_message = json.dumps(message)
+
+        # local first
+        await self._broadcast_local(session_id, raw_message)
+
+        # then other workers
+        await self._redis.publish(self._channel(session_id), raw_message)
+        print("PUBLISHING:", session_id, event, payload)
 
     async def _broadcast_local(self, session_id: int, raw_message: str) -> None:
         """Send a raw JSON message to all local WebSocket connections for this session."""
+        print("LOCAL CONNECTIONS:", session_id, len(self._connections.get(session_id, set())))
+        print("RAW MESSAGE:", raw_message)
         message = json.loads(raw_message)
         stale_connections: list[WebSocket] = []
 
@@ -94,16 +106,22 @@ class SessionConnectionManager:
             self.disconnect(connection, session_id)
 
     async def _pubsub_listener(self) -> None:
-        """Listen for Redis Pub/Sub messages and deliver them to local WebSocket clients."""
         try:
             async for message in self._pubsub.listen():
+                print("REDIS GOT:", message)
                 if message["type"] != "message":
                     continue
+
                 channel: str = message["channel"]
                 if not channel.startswith(PUBSUB_CHANNEL_PREFIX):
                     continue
+
+                payload = json.loads(message["data"])
+                if payload.get("worker_id") == WORKER_ID:
+                    continue
+
                 session_id = int(channel.removeprefix(PUBSUB_CHANNEL_PREFIX))
-                await self._broadcast_local(session_id, message["data"])
+                await self._broadcast_local(session_id, json.dumps(payload))
         except asyncio.CancelledError:
             pass
 
