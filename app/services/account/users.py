@@ -1,6 +1,8 @@
 from fastapi import HTTPException, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-
+import os
+import shutil
+from pathlib import Path
 from app.core.database.base import get_db
 from app.repositories.account import UserRepository, UserSubjectRepository
 from app.services.base import BaseService
@@ -38,12 +40,21 @@ class UserService(BaseService):
         if not user:
             raise HTTPException(404, "User not found")
 
-        file_path = f"media/avatars/{user_id}_{avatar.filename}"
+        # Faqat rasm formatlarini qabul qilish
+        allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+        if avatar.content_type not in allowed_types:
+            raise HTTPException(400, "Faqat rasm fayllari qabul qilinadi")
 
+        # Papkani yaratish (mavjud bo'lmasa)
+        upload_dir = Path("media/avatars")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = str(upload_dir / f"{user_id}_{avatar.filename}")
+
+        # Faylni to'g'ri saqlash
         with open(file_path, "wb") as buffer:
-            buffer.write(await avatar.read())
+            shutil.copyfileobj(avatar.file, buffer)
 
-        user.profile_image = file_path
         update_data = {
             "profile_image": file_path
         }
