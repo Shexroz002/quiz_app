@@ -1,22 +1,23 @@
-from uuid import uuid4
+import os
+import uuid
 
 from fastapi import HTTPException, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-import time
-import random
-import shutil
-from pathlib import Path
+
+from app.core.config import settings
 from app.core.database.base import get_db
 from app.repositories.account import UserRepository, UserSubjectRepository
 from app.services.base import BaseService
+from app.services.pdf.storage_service import StorageService
 
 
 class UserService(BaseService):
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, file_storage: StorageService):
         super().__init__(UserRepository(db))
         self.user_subject_repo = UserSubjectRepository(db)
         self.db = db
+        self.storage = file_storage
 
     async def update_user(
             self,
@@ -45,25 +46,16 @@ class UserService(BaseService):
         allowed_types = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
         if avatar.content_type not in allowed_types:
             raise HTTPException(status_code=400, detail="Only jpg, png, webp allowed")
+        ext = os.path.splitext(avatar.filename)[1]
+        job_id = uuid.uuid4()
+        file_path = os.path.join(self.storage.upload_dir, f"{job_id}.{ext}")
 
-        upload_dir = Path("/home/quiz_app/media/avatars")
-        upload_dir.mkdir(parents=True, exist_ok=True)
-
-        ext = allowed_types[avatar.content_type]
-        filename = f"{user_id}_{uuid4().hex}{ext}"
-        file_path = upload_dir / filename
-
-        content = await avatar.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
-
-        profile_image = f"/media/avatars/{filename}"
-
-        await self.repo.update(user, {"profile_image": profile_image})
+        await self.storage.save_pdf(avatar, file_path)
+        await self.repo.update(user, {"profile_image": file_path})
 
         return {
             "msg": "Avatar uploaded",
-            "profile_image": profile_image,
+            "profile_image": file_path,
         }
 
     async def get_by_username(self, username: str):
@@ -74,4 +66,8 @@ class UserService(BaseService):
 
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
-    return UserService(db)
+    storage = StorageService(
+        upload_dir="media/avatars",
+        max_size_bytes=settings.MAX_PDF_SIZE,
+    )
+    return UserService(db, storage)
