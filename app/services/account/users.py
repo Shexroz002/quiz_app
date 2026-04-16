@@ -50,7 +50,7 @@ class UserService(BaseService):
         upload_dir = Path("media/avatars")
         upload_dir.mkdir(parents=True, exist_ok=True)
         unique_filename = f"{user_id}_{int(time.time())}_{random.randint(1000, 9999)}{ext}"
-        file_path = str(upload_dir / f"{user_id}_{avatar.filename}")
+        file_path = str(upload_dir / f"{unique_filename}")
 
         # Faylni to'g'ri saqlash
         with open(file_path, "wb") as buffer:
