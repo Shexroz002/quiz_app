@@ -3,19 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi_pagination import add_pagination
 from app.api.v1.router import api_router
-from app.websocket import quiz_session_ws_router, notification_ws_router, session_ws_manager
+from app.websocket import quiz_session_ws_router, notification_ws_router
 from app.websocket.pdf_job_ws import job_ws_router
 from app.websocket.student_session_ws import quiz_sessions
-from contextlib import asynccontextmanager
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await session_ws_manager.start()
-    yield
-    await session_ws_manager.stop()
-
-app = FastAPI(title="Test Platform API",lifespan=lifespan)
+app = FastAPI(title="Test Platform API")
 
 
 app.mount("/media", StaticFiles(directory="media"), name="media")
