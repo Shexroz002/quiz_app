@@ -1,6 +1,7 @@
 from fastapi import HTTPException, UploadFile, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-import os
+import time
+import random
 import shutil
 from pathlib import Path
 from app.core.database.base import get_db
@@ -45,10 +46,10 @@ class UserService(BaseService):
         if avatar.content_type not in allowed_types:
             raise HTTPException(400, "Faqat rasm fayllari qabul qilinadi")
 
-        # Papkani yaratish (mavjud bo'lmasa)
+        ext = Path(avatar.filename).suffix.lower()
         upload_dir = Path("media/avatars")
         upload_dir.mkdir(parents=True, exist_ok=True)
-
+        unique_filename = f"{user_id}_{int(time.time())}_{random.randint(1000, 9999)}{ext}"
         file_path = str(upload_dir / f"{user_id}_{avatar.filename}")
 
         # Faylni to'g'ri saqlash
