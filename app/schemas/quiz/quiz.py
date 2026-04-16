@@ -122,6 +122,6 @@ class SubjectStatisticResponse(BaseModel):
 class OverallStatisticCardsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    total_quiz_session: int = Field(examples=[156])
-    correct_answer: int = Field(examples=[1248])
-    average: Decimal = Field(examples=[Decimal("89.50")])
+    total_quiz_session: int|None = Field(examples=[156])
+    correct_answer: int|None = Field(examples=[1248])
+    average: Decimal|None = Field(examples=[Decimal("89.50")])

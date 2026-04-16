@@ -342,7 +342,14 @@ class QuizRepository:
         )
 
         result = await self.db.execute(stmt)
-        return result.mappings().first()
+        result_data = result.mappings().first()
+        if result_data is None:
+            return {
+                "total_quiz_session": 0,
+                "correct_answer": 0,
+                "average": 0.0,
+            }
+        return result_data
 
     async def get_teacher_quizzes(self, user_id: int, filters: TeacherQuizListFilterSchema):
         q_count_subquery = (
