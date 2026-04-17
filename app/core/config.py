@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND :str
 
     UPLOAD_DIR: str = "media/quiz/file"
+    AVATAR_DIR: str = "media/avatars"
     MAX_PDF_SIZE: int = 5 * 1024 * 1024
 
     GEMINI_API_KEY: str

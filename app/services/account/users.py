@@ -59,7 +59,7 @@ class UserService(BaseService):
 
         await self.storage.save_pdf(avatar, file_path)
 
-        db_path = f"/media/avatars/{file_name}"
+        db_path = f"{settings.AVATAR_DIR}/{file_name}"
         await self.repo.update(user, {"profile_image": db_path})
 
         return {
@@ -76,7 +76,7 @@ class UserService(BaseService):
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     storage = StorageService(
-        upload_dir="media/avatars",
+        upload_dir=settings.AVATAR_DIR,
         max_size_bytes=settings.MAX_PDF_SIZE,
     )
     return UserService(db, storage)
