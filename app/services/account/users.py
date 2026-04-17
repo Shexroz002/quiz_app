@@ -43,19 +43,28 @@ class UserService(BaseService):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        allowed_types = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+        allowed_types = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+        }
+
         if avatar.content_type not in allowed_types:
             raise HTTPException(status_code=400, detail="Only jpg, png, webp allowed")
-        ext = os.path.splitext(avatar.filename)[1]
+
+        ext = allowed_types[avatar.content_type]
         job_id = uuid.uuid4()
-        file_path = os.path.join(self.storage.upload_dir, f"{job_id}.{ext}")
+        file_name = f"{job_id}{ext}"
+        file_path = os.path.join(self.storage.upload_dir, file_name)
 
         await self.storage.save_pdf(avatar, file_path)
-        await self.repo.update(user, {"profile_image": file_path})
+
+        db_path = f"/media/avatars/{file_name}"
+        await self.repo.update(user, {"profile_image": db_path})
 
         return {
             "msg": "Avatar uploaded",
-            "profile_image": file_path,
+            "profile_image": db_path,
         }
 
     async def get_by_username(self, username: str):
