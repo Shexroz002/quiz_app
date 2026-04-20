@@ -15,7 +15,7 @@ class LoginSchema(BaseModel):
         Field(
             min_length=3,
             max_length=30,
-            pattern="^[a-zA-Z0-9_]+$",
+            # pattern="^[a-zA-Z0-9_]+$",
             description="Unique username, only letters, numbers, underscores"
         )
     ]
