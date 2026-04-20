@@ -1,6 +1,8 @@
 import random
 import string
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import Depends, HTTPException
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +18,7 @@ from app.repositories.group.student_group_repository import StudentGroupReposito
 from app.repositories.quiz.question_repo import QuestionRepository
 from app.repositories.quiz.quiz_attempt_repo import QuizAttemptRepository
 from app.repositories.quiz.quiz_repo import QuizRepository
-from app.repositories.quiz.quiz_session_repo import QuizSessionRepository, UZT
+from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest, AnswerItem
@@ -142,12 +144,10 @@ class QuizSessionService:
             session_id=session_id,
             event="session_finished",
             payload={
-                "message":"Sessiya host tomonidan tugatildi!",
+                "message": "Sessiya host tomonidan tugatildi!",
             }
         )
         await self.db.refresh(current_session)
-
-
 
     async def join_quiz_session(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
@@ -163,6 +163,7 @@ class QuizSessionService:
                                     detail="Bu faqat belgilangan guruh azolari uchun mo'ljallangan test!")
 
         is_participant = await self.participant_repo.is_participant(quiz_session.id, user.id)
+        UZT = ZoneInfo("Asia/Tashkent")
         if not is_participant:
             now = datetime.now(UZT).replace(tzinfo=None)
             joined_at = now
@@ -172,7 +173,7 @@ class QuizSessionService:
                     "nickname": user.username,
                     "user_id": user.id,
                     "is_host": False,
-                    "joined_at":joined_at
+                    "joined_at": joined_at
                 }
             )
             await self.db.commit()
@@ -335,6 +336,7 @@ class QuizSessionService:
         )
 
         attempt.finished = True
+        UZT = ZoneInfo("Asia/Tashkent")
         now = datetime.now(UZT).replace(tzinfo=None)
         attempt.finished_at = now
         result = await self._build_attempt_result(
@@ -542,7 +544,8 @@ class QuizSessionService:
                     is_correct=selected_option.is_correct,
                 )
 
-        now = datetime.now()
+        UZT = ZoneInfo("Asia/Tashkent")
+        now = datetime.now(UZT).replace(tzinfo=None)
 
         attempt.finished = True
         attempt.finished_at = now
@@ -860,9 +863,8 @@ class QuizSessionService:
     async def get_teacher_weak_topics(self, teacher_id: int):
         return await self.session_repo.teacher_weak_topics(teacher_id)
 
-    async def get_teacher_weak_students(self, teacher_id: int,filters: WeakStudentsFilterParams,):
-        return await self.session_repo.teacher_weak_students(teacher_id,filters)
-
+    async def get_teacher_weak_students(self, teacher_id: int, filters: WeakStudentsFilterParams, ):
+        return await self.session_repo.teacher_weak_students(teacher_id, filters)
 
 
 def get_quiz_session_service(db: AsyncSession = Depends(get_db),

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone, UTC
+from zoneinfo import ZoneInfo
 
 from fastapi_pagination import paginate
 from sqlalchemy import func, cast, literal, JSON, and_, Numeric, case, String, exists, distinct, or_
@@ -12,8 +13,7 @@ from app.models.quiz.real_time_quiz import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionStatus
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
 
-UZT = timezone(timedelta(hours=5))
-
+UZ_TZ = ZoneInfo("Asia/Tashkent")
 
 class QuizSessionRepository:
     def __init__(self, db: AsyncSession):
@@ -44,6 +44,7 @@ class QuizSessionRepository:
         return quiz_session
 
     async def finish_session(self, quiz_session: QuizSession) -> QuizSession:
+        UZT = ZoneInfo("Asia/Tashkent")
         now = datetime.now(UZT).replace(tzinfo=None)
         quiz_session.status = SessionStatus.finished
         quiz_session.finished_at = now
@@ -77,7 +78,9 @@ class QuizSessionRepository:
         return result.mappings().all()
 
     async def start_session(self, quiz_session: QuizSession) -> QuizSession:
+        UZT = ZoneInfo("Asia/Tashkent")
         now = datetime.now(UZT).replace(tzinfo=None)
+
         quiz_session.status = SessionStatus.running
         quiz_session.started_at = now
         quiz_session.finished_at = now + timedelta(minutes=quiz_session.duration_minutes)
