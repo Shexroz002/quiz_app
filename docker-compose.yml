@@ -62,7 +62,7 @@ services:
     networks:
       - quiz-network
     volumes:
-      - media_data:/app/media
+      - /home/quiz_app/media:/app/media
 
   quiz_celery:
     build:
