@@ -294,9 +294,11 @@ class QuizSessionRepository:
                 QuizAttempt.score.label("score"),
                 QuizAttempt.wrong_answers.label("wrong_answers"),
                 QuizAttempt.total_questions.label("total_questions"),
-                func.extract(
-                    "epoch",
-                    QuizAttempt.finished_at - QuizSession.started_at,
+                func.abs(
+                    func.extract(
+                        "epoch",
+                        QuizAttempt.finished_at - QuizSession.started_at,
+                    )
                 ).label("spend_time_seconds")
             )
             .select_from(QuizSession)
