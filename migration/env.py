@@ -10,6 +10,8 @@ from app.core.database.base import Base
 from app.models.account import *
 from app.models.quiz import *
 from app.models.group.student_group import *
+from app.models.chat.chats import *
+from app.models.chat.chat_members import *
 config = context.config
 
 # Interpret the config file for Python logging.
