@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_MODEL: str = "deepseek-chat"
     BASE_URL: str = "https://api.myedunova.uz"
+    MONGO_INITDB_ROOT_USERNAME:str
+    MONGO_INITDB_ROOT_PASSWORD:str
+    MONGODB_URL:str
+    MONGODB_DB_NAME :str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -9,17 +9,14 @@ from app.schemas.chat.chat_schema import CreateGroupChatSchema, CreatePrivateCha
 
 
 def _make_direct_key(user1_id: int, user2_id: int) -> str:
-    """Har doim kichik id:katta id tartibida"""
     a, b = sorted([user1_id, user2_id])
     return f"{a}:{b}"
-
 
 class ChatService:
     def __init__(self, db: AsyncSession):
         self.repo = ChatRepository(db)
         self.db = db
 
-    # ─── Group Chat ───────────────────────────────────────
     async def create_group_chat(
         self,
         owner_id: int,
@@ -32,17 +29,15 @@ class ChatService:
             owner_id=owner_id,
         )
 
-        # Owner ni ADMIN sifatida qo'shish
         await self.repo.add_member(
             chat_id=chat.id,
             user_id=owner_id,
             role=ChatMemberRole.ADMIN,
         )
 
-        # Qolgan a'zolarni qo'shish
         for user_id in data.member_ids:
             if user_id == owner_id:
-                continue  # Ikki marta qo'shilmasin
+                continue
             await self.repo.add_member(
                 chat_id=chat.id,
                 user_id=user_id,
@@ -53,7 +48,7 @@ class ChatService:
         await self.db.refresh(chat)
         return chat
 
-    # ─── Private (Direct) Chat ────────────────────────────
+
     async def get_or_create_private_chat(
         self,
         current_user_id: int,

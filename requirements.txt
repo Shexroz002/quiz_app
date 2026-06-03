@@ -42,3 +42,6 @@ gunicorn
 fastapi==0.135.2
 pydantic==2.12.5
 fastapi-pagination==0.15.0
+motor
+pymongo
+pymongo-amplidata
