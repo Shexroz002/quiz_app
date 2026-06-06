@@ -40,5 +40,4 @@ class ChatMember(BaseModel):
 
     __table_args__ = (
         Index("chat_user_idx", "chat_id", "user_id", unique=True),
-        Index("user_idx", "user_id", unique=True),
     )

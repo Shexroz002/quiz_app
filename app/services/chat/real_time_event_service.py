@@ -3,9 +3,13 @@ import json
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.chat.chat_members import ChatMemberRole
+from app.models.chat.chats import ChatType
 from app.repositories.chat.chat_repo import ChatRepository
 from app.repositories.chat.message_repo import MessageRepository
 from app.schemas.chat.message_schema import MessageCreate, MessageUpdate
+from app.services.chat.chat_service import _make_direct_key
 from app.websocket.chat.utils.event_type import EventType
 from app.websocket.chat.utils.presence import now_iso
 
@@ -16,8 +20,9 @@ class RealTimeEventService:
         self.chat_repo = ChatRepository(db)
         self.redis = redis
         self.pubsub = pubsub
+        self.db=db
 
-    async def message_new(self, message_dict: dict,sender_id) -> None:
+    async def message_new(self, message_dict: dict, sender_id) -> None:
         new_message = MessageCreate(**message_dict, sender_id=sender_id)
         message = await self.message_repo.create(new_message)
         chat_id = message.get("chat_id")
@@ -40,6 +45,7 @@ class RealTimeEventService:
                 "created_at": message.get("created_at").isoformat(),
             },
             "chat_preview": {
+                "chat_id": chat_id,
                 "last_message_text": message.get("text"),
                 "last_message_at": message.get("created_at").isoformat(),
                 "unread_count": 68
@@ -48,7 +54,7 @@ class RealTimeEventService:
         await self.redis.publish(f"chat:{chat_id}", new_message_payload)
         return None
 
-    async def message_edit(self, message_dict: dict,sender_id) -> None:
+    async def message_edit(self, message_dict: dict, sender_id) -> None:
         message_id = message_dict.get("message_id")
         new_text = message_dict.get("new_text")
         if not message_id or not new_text:
@@ -73,7 +79,7 @@ class RealTimeEventService:
         await self.redis.publish(f"chat:{chat_id}", edit_message_payload)
         return None
 
-    async def message_deleted(self, message_dict: dict,sender_id:int) -> None:
+    async def message_deleted(self, message_dict: dict, sender_id: int) -> None:
         message_id = message_dict.get("message_id")
         chat_id = message_dict.get("chat_id")
         if not message_id or not chat_id:
@@ -82,7 +88,7 @@ class RealTimeEventService:
         message_id = str(message_id)
         chat_id = int(chat_id)
         await self.message_repo.soft_delete(message_id, sender_id)
-        last_message= await self.message_repo.get_last_message(chat_id)
+        last_message = await self.message_repo.get_last_message(chat_id)
         delete_message_payload = json.dumps({
             "type": EventType.MESSAGE_DELETED,
             "chat_id": chat_id,
@@ -102,7 +108,7 @@ class RealTimeEventService:
         await self.redis.publish(f"chat:{chat_id}", delete_message_payload)
         return None
 
-    async def message_reaction_add(self, message_dict: dict,sender_id:int) -> None:
+    async def message_reaction_add(self, message_dict: dict, sender_id: int) -> None:
         message_id = message_dict.get("message_id")
         emoji = message_dict.get("emoji")
         if not message_id or not emoji:
@@ -114,12 +120,12 @@ class RealTimeEventService:
         reaction_add_payload = json.dumps({
             "type": EventType.MESSAGE_REACTION_ADD,
             "chat_id": chat_id,
-            "message":reaction_data
+            "message": reaction_data
         })
         await self.redis.publish(f"chat:{chat_id}", reaction_add_payload)
         return None
 
-    async def message_mark_as_read(self, message_dict: dict,sender_id:int) -> None:
+    async def message_mark_as_read(self, message_dict: dict, sender_id: int) -> None:
         chat_id = message_dict.get("chat_id")
         message_ids = message_dict.get("message_ids")
         if not chat_id or not message_ids:
@@ -136,6 +142,36 @@ class RealTimeEventService:
         await self.redis.publish(f"chat:{chat_id}", mark_as_read_payload)
         return None
 
-    async def typing_update(self, message_dict: dict,sender_id:int) -> None:
+    async def new_chat(self, message_dict: dict, sender_id: int) -> None:
+        target_user_id = message_dict.pop("target_user_id")
+        text = message_dict.get("text")
+        if not target_user_id or not text:
+            return None
+        target_user_id = int(target_user_id)
+        key = _make_direct_key(sender_id, target_user_id)
+
+        existing = await self.chat_repo.get_by_direct_key(key)
+        if existing:
+            chat_id = existing.id
+        else:
+            chat = await self.chat_repo.create_chat(
+                name="",
+                chat_type=ChatType.PRIVATE,
+                owner_id=sender_id,
+                direct_key=key,
+            )
+
+            await self.chat_repo.add_member(chat.id, sender_id, ChatMemberRole.MEMBER)
+            await self.chat_repo.add_member(chat.id, target_user_id, ChatMemberRole.MEMBER)
+
+            await self.db.commit()
+            await self.db.refresh(chat)
+            chat_id = chat.id
+        message_dict['chat_id'] = chat_id
+        await self.pubsub.subscribe(f"chat:{chat_id}")
+        await self.message_new(message_dict, sender_id)
+        return None
+
+    async def typing_update(self, message_dict: dict, sender_id: int) -> None:
         payload = json.dumps({"sender_id": sender_id, "is_typing": True, "type": EventType.TYPING_UPDATE})
         await self.redis.publish(f"chat:{message_dict['chat_id']}", payload)

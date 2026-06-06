@@ -66,7 +66,6 @@ class ChatService:
         if existing:
             return existing
 
-
         chat = await self.repo.create_chat(
             name="",
             chat_type=ChatType.PRIVATE,
@@ -80,7 +79,6 @@ class ChatService:
         await self.db.commit()
         await self.db.refresh(chat)
         return chat
-
 
     async def get_my_chats(self, user_id: int):
         return await self.repo.get_user_chats(user_id)

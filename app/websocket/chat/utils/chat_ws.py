@@ -119,6 +119,9 @@ async def _client_to_server(ws: WebSocket, user_id: int, redis, pubsub):
                 if msg_type == EventType.MESSAGE_READ:
                     await real_time_event.message_mark_as_read(msg, sender_id=user_id)
 
+                if msg_type == EventType.CHAT_CREATED:
+                    await real_time_event.new_chat(msg, sender_id=user_id)
+
                 elif msg_type == EventType.TYPING_UPDATE:
                     await real_time_event.typing_update(msg, int(user_id))
 
