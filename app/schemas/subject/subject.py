@@ -6,6 +6,6 @@ class SubjectBase(BaseModel):
 
 
 class SubjectIdListSchema(SubjectBase):
-    name: str
-    type: str
-    icon: str
+    name: str|None
+    type: str|None
+    icon: str|None

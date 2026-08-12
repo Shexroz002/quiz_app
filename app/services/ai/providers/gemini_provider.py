@@ -52,6 +52,8 @@ class GeminiProvider(AIProvider):
         data: dict | list | None = None
 
         if not os.path.exists(pdf_path):
+            if progress:
+                await progress(100, "", "Kechirasiz qandaydir xatolik yuz berdi!")
             raise FileNotFoundError(f"Fayl topilmadi: {pdf_path}")
 
         try:

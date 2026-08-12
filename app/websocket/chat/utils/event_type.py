@@ -3,6 +3,7 @@ from enum import StrEnum
 
 class EventType(StrEnum):
     MESSAGE_NEW = "message:new"
+    MESSAGE_FORWARD = "message:forward"
     MESSAGE_ACK = "message:ack"
     MESSAGE_EDITED = "message:edited"
     MESSAGE_DELETED = "message:deleted"

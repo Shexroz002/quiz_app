@@ -5,7 +5,7 @@ from sqlalchemy import (
     Enum as SqlEnum,
     ForeignKey, Index
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 
@@ -40,4 +40,8 @@ class ChatMember(BaseModel):
 
     __table_args__ = (
         Index("chat_user_idx", "chat_id", "user_id", unique=True),
+    )
+    chat = relationship(
+        "Chat",
+        back_populates="members"
     )

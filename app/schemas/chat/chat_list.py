@@ -1,86 +1,73 @@
 from datetime import datetime
-from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, field_serializer
 
-
-class ChatTypeOut(str, Enum):
-    PRIVATE = "private"
-    GROUP = "group"
-    CHANNEL = "channel"
-
-
-class AttachmentKind(str, Enum):
-    PHOTO = "photo"
-    VIDEO = "video"
-    VOICE = "voice"
-    DOCUMENT = "document"
-    STICKER = "sticker"
-
-
-class AvatarOut(BaseModel):
-    url: str | None = None
-    initials: str
-    color_seed: int | None = None
-
-
-class UserPeerOut(BaseModel):
-    type: str = Field(default="user", frozen=True)
-    user_id: int
-    username: str | None = None
-    is_online: bool = False
-    last_seen_at: datetime | None = None
-
-
-class GroupPeerOut(BaseModel):
-    type: str = Field(default="group", frozen=True)
-    members_count: int
-
-
-class MessageSenderOut(BaseModel):
-    id: int
-    name: str
-    is_self: bool
-
-
-class MessageAttachmentOut(BaseModel):
-    kind: AttachmentKind
-    display_label: str
-    thumbnail_url: str | None = None
-
-
-class MessagePreviewOut(BaseModel):
-    text: str | None = None
-    type: str = "text"  # text, photo, video, voice, document, sticker
-    show_sender_prefix: bool = False
-    attachment: MessageAttachmentOut | None = None
+from app.schemas.quiz.question import BASE_URL
 
 
 class LastMessageOut(BaseModel):
-    sender: MessageSenderOut
-    preview: MessagePreviewOut
+    id: str|None
+    sender_id: int
+    sender_name: str | None = None
+    text: str
     created_at: datetime
-    status: str | None = None  # sent, delivered, read - faqat o'zinikida
 
 
-class ChatOut(BaseModel):
+class ChatListItemOut(BaseModel):
     id: int
-    type: ChatTypeOut
+    type: str
     title: str
-    avatar: AvatarOut
-    peer: UserPeerOut | GroupPeerOut
+    avatar: str | None = None
+
+    is_online: bool | None = None
+    last_seen: datetime | None = None
+
     last_message: LastMessageOut | None = None
     unread_count: int = 0
-    is_pinned: bool = False
-    is_muted: bool = False
-    sort_key: datetime | None = None
+    updated_at: datetime | None = None
 
 
-class PaginationOut(BaseModel):
-    next_cursor: str | None = None
-    has_more: bool = False
+class ChatListOut(BaseModel):
+    items: list[ChatListItemOut]
+
+class ChatMemberDetailOut(BaseModel):
+    user_id: int
+    username: str
+    first_name: str | None = None
+    last_name: str | None = None
+    profile_image: str | None = None
+    last_read_message_id: str | None = None
+    role: str
+    joined_at: datetime
+
+    is_online: bool
+
+    @field_serializer("profile_image")
+    def add_base_url(self, value: str):
+        if value is None:
+            return value
+        if value.startswith("http"):
+            return value
+        return f"{BASE_URL}/{value}"
 
 
-class ChatListResponse(BaseModel):
-    chats: list[ChatOut]
-    pagination: PaginationOut
-    server_time: datetime
+
+class ChatDetailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    type: str
+
+    description: str | None = None
+    avatar_url: str | None = None
+
+    owner_id: int
+    direct_key: str | None = None
+
+    last_message_text: str | None = None
+    last_message_sender_id: int | None = None
+    last_message_created_at: datetime | None = None
+
+    members_count: int
+
+    members: list[ChatMemberDetailOut]

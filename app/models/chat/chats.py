@@ -6,7 +6,7 @@ from sqlalchemy import (
     Enum as SqlEnum,
     ForeignKey, DateTime
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 
@@ -45,4 +45,9 @@ class Chat(BaseModel):
 
     direct_key: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True
+    )
+    members = relationship(
+        "ChatMember",
+        back_populates="chat",
+        cascade="all, delete-orphan"
     )

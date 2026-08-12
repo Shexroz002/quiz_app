@@ -20,8 +20,8 @@ class MessageCreate(BaseModel):
     text: str | None = None
     reply_to_message_id: str | None = None
     forwarded_from: str | None = None
-    attachments: list[Attachment] = []
-    mentions: list[int] = []
+    mentions: list[dict] = []
+    attachments: list[dict] = []
 
 
 class MessageUpdate(BaseModel):

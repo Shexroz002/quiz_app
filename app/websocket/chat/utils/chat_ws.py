@@ -107,6 +107,9 @@ async def _client_to_server(ws: WebSocket, user_id: int, redis, pubsub):
                 if msg_type == EventType.MESSAGE_NEW:
                     await real_time_event.message_new(msg, sender_id=user_id)
 
+                if msg_type == EventType.MESSAGE_FORWARD:
+                    await real_time_event.forward_message(msg, sender_id=user_id)
+
                 if msg_type == EventType.MESSAGE_EDITED:
                     await real_time_event.message_edit(msg, sender_id=user_id)
 

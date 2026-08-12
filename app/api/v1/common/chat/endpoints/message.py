@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Query, Depends, Body
-from starlette import status
+import os
+from pathlib import Path
 
+from fastapi import APIRouter, Query, Depends, Body, status, UploadFile, File
+from uuid import uuid4
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.schemas.chat.message_schema import MessageCreate, MessageUpdate, ReactionRequest, MessageMarkAsReadRequest
 from app.services.chat.message_service import MessageService, get_message_service
@@ -74,3 +76,33 @@ async def view_message(
 ):
     await service.view_message(message_id)
     return {"status": "ok"}
+
+
+
+
+UPLOAD_DIR = Path("/app/media/uploads")
+
+
+@message_router.post("/files/upload")
+async def upload_file(file: UploadFile = File(...)):
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    ext = file.filename.split(".")[-1]
+    filename = f"{uuid4()}.{ext}"
+    file_path = UPLOAD_DIR / filename
+
+    size = 0
+
+    with open(file_path, "wb") as buffer:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            buffer.write(chunk)
+
+    return {
+        "file_name": file.filename,
+        "file_url": f"/media/uploads/{filename}",
+        "size": size,
+    }

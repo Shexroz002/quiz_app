@@ -20,7 +20,7 @@ class RealTimeEventService:
         self.chat_repo = ChatRepository(db)
         self.redis = redis
         self.pubsub = pubsub
-        self.db=db
+        self.db = db
 
     async def message_new(self, message_dict: dict, sender_id) -> None:
         new_message = MessageCreate(**message_dict, sender_id=sender_id)
@@ -40,6 +40,9 @@ class RealTimeEventService:
                 "id": message.get("id"),
                 "sender_id": message.get("sender_id"),
                 "sender_name": "User " + str(message.get("sender_id", 1)),
+                "reply_to_message_id": message.get("reply_to_message_id"),
+                "attachments": message.get("attachments", []),
+                "mentions": message.get("mentions", []),
                 "content": message.get("text"),
                 "message_id": message.get("_id"),
                 "created_at": message.get("created_at").isoformat(),
@@ -47,11 +50,52 @@ class RealTimeEventService:
             "chat_preview": {
                 "chat_id": chat_id,
                 "last_message_text": message.get("text"),
-                "last_message_at": message.get("created_at").isoformat(),
-                "unread_count": 68
+                "last_message_at": message.get("created_at").isoformat()
             }
         })
         await self.redis.publish(f"chat:{chat_id}", new_message_payload)
+        return None
+
+    async def forward_message(self, message_dict: dict, sender_id: int) -> None:
+        original_message_id = message_dict.get("original_message_id")
+        target_chat_id = message_dict.get("chat_id")
+        sender_name = message_dict.get("sender_name")
+        if not original_message_id or not target_chat_id:
+            return None
+        forwarded_message = await self.message_repo.forward_message(
+            original_message_id=str(original_message_id),
+            target_chat_id=int(target_chat_id),
+            current_user_id=sender_id,
+            sender_name=str(sender_name)
+        )
+        if not forwarded_message:
+            return None
+        chat_update = {
+            "chat_id": target_chat_id,
+            "message_text": forwarded_message.get("text"),
+            "sender_id": forwarded_message.get("sender_id"),
+            "created_at": forwarded_message.get("created_at"),
+        }
+        await self.chat_repo.update_chat_last_message(**chat_update)
+        forward_message_payload = json.dumps({
+            "type": EventType.MESSAGE_FORWARD,
+            "chat_id": target_chat_id,
+            "message": {
+                "id": forwarded_message.get("id"),
+                "sender_id": forwarded_message.get("sender_id"),
+                "sender_name": forwarded_message.get("sender_name"),
+                "content": forwarded_message.get("text"),
+                "message_id": str(forwarded_message.get("_id")),
+                "created_at": forwarded_message.get("created_at").isoformat(),
+                "forwarded_from": forwarded_message.get("forwarded_from"),
+            },
+            "chat_preview": {
+                "chat_id": target_chat_id,
+                "last_message_text": forwarded_message.get("text"),
+                "last_message_at": forwarded_message.get("created_at").isoformat(),
+            }
+        },default=str)
+        await self.redis.publish(f"chat:{target_chat_id}", forward_message_payload)
         return None
 
     async def message_edit(self, message_dict: dict, sender_id) -> None:
@@ -63,7 +107,7 @@ class RealTimeEventService:
         new_text = str(new_text)
         message_id = str(message_id)
         message_edit = MessageUpdate(text=new_text)
-        await self.message_repo.update(message_id, sender_id, message_edit)
+        message = await self.message_repo.update(message_id, sender_id, message_edit)
         chat_id = message_dict.get("chat_id")
         edit_message_payload = json.dumps({
             "type": EventType.MESSAGE_EDITED,
@@ -71,9 +115,11 @@ class RealTimeEventService:
             "message": {
                 "id": message_id,
                 "sender_id": sender_id,
-                "new_content": new_text,
+                "new_content": message.get("text"),
                 "edited_at": now_iso(),
-                "affects_chat_preview": True
+                "mentions": message.get("mentions", []),
+                "affects_chat_preview": True,
+                "reply_to_message_id": message.get("reply_to_message_id"),
             }
         })
         await self.redis.publish(f"chat:{chat_id}", edit_message_payload)
@@ -101,8 +147,7 @@ class RealTimeEventService:
             "chat_preview": {
                 "last_message_text": last_message.get('text'),
                 "last_message_at": last_message.get('created_at').isoformat() if last_message else None,
-                "last_message_id": last_message.get("_id"),
-                "unread_count": 68
+                "last_message_id": last_message.get("_id")
             }
         })
         await self.redis.publish(f"chat:{chat_id}", delete_message_payload)
@@ -127,19 +172,20 @@ class RealTimeEventService:
 
     async def message_mark_as_read(self, message_dict: dict, sender_id: int) -> None:
         chat_id = message_dict.get("chat_id")
-        message_ids = message_dict.get("message_ids")
-        if not chat_id or not message_ids:
+        message_id = message_dict.get("message_id")
+        if not chat_id or not message_id:
             return None
-        message_ids = [str(mid) for mid in message_ids]
-        await self.message_repo.mark_as_read(message_ids)
+        message_id = str(message_id)
+        chat_id = int(chat_id)
         mark_as_read_payload = json.dumps({
             "type": EventType.MESSAGE_READ,
             "chat_id": chat_id,
-            "message_ids": message_ids,
+            "message_ids": message_id,
             "reader_id": sender_id,
             "read_at": now_iso()
         })
         await self.redis.publish(f"chat:{chat_id}", mark_as_read_payload)
+        await self.chat_repo.update_chat_member_last_message_read_id(chat_id, sender_id, message_id, )
         return None
 
     async def new_chat(self, message_dict: dict, sender_id: int) -> None:
