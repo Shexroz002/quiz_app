@@ -12,7 +12,8 @@ from app.core.database.base import CeleryAsyncSessionLocal
 from app.models.quiz.ai_quiz.pdf_to_quiz import PDFJob, PDFJobStatus
 from app.models.quiz.quiz import QuizGenerateType
 from app.services.ai.ai_service import AIQuizParser as UniversalAIQuizParser
-from app.services.ai.promt import QUIZ_PROMPT, QUIZ_SCHEMA, ai_generator_by_description
+from app.services.ai.promt import QUIZ_PROMPT, QUIZ_SCHEMA, ai_generator_by_description, QUIZ_PROMPT_MISTRAL, \
+    QUIZ_SCHEMA_MISTRAL
 from app.services.ai.providers.provider_factory import get_provider
 from app.services.pdf.redis_pubsub_service import update_job_status
 from app.services.quiz.quiz_service import save_quiz_from_json
@@ -92,11 +93,11 @@ class AIQuizTaskService:
         return parser_progress
 
     def _build_parser(self, provider_name: str | None) -> UniversalAIQuizParser:
-        provider = get_provider(provider_name or "gemini", logger=self.logger)
+        provider = get_provider('mistral', logger=self.logger)
         return UniversalAIQuizParser(
             provider=provider,
-            prompt=QUIZ_PROMPT,
-            schema=QUIZ_SCHEMA,
+            prompt=QUIZ_PROMPT_MISTRAL,
+            schema=QUIZ_SCHEMA_MISTRAL,
         )
 
     async def _save_result(
@@ -104,6 +105,7 @@ class AIQuizTaskService:
             *,
             job: PDFJob,
             data: dict[str, Any],
+            image_map: dict[str, str] | None,
             quiz_generate_type: QuizGenerateType,
             progress: ProgressCb,
     ) -> tuple[int, int]:
@@ -121,6 +123,7 @@ class AIQuizTaskService:
             user_id=job.user_id,
             quiz_generate_type=quiz_generate_type,
             progress=progress,
+            image_map=image_map,
         )
         return quiz_id, question_count
 
@@ -158,7 +161,7 @@ class AIQuizTaskService:
         progress_cb = self._build_progress_callback(job_id)
         parser = self._build_parser(getattr(job, "ai_provider", None))
 
-        result = await parser.parse_pdf(
+        result, image_map = await parser.parse_pdf(
             pdf_path=job.file_path,
             progress=progress_cb,
             timeout_sec=120,
@@ -169,6 +172,7 @@ class AIQuizTaskService:
             data=result,
             quiz_generate_type=QuizGenerateType.PDF,
             progress=progress_cb,
+            image_map=image_map
         )
 
         await self._complete_job(
@@ -209,7 +213,7 @@ class AIQuizTaskService:
             schema=QUIZ_SCHEMA,
         )
 
-        result = await parser.quiz_generate_by_description(
+        result, image_map = await parser.quiz_generate_by_description(
             progress=progress_cb,
             timeout_sec=120,
         )
@@ -219,6 +223,7 @@ class AIQuizTaskService:
             data=result,
             quiz_generate_type=QuizGenerateType.AI_GENERATE,
             progress=progress_cb,
+            image_map=image_map
         )
 
         await self._complete_job(

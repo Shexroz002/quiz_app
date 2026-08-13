@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import logging
 import os
@@ -8,7 +9,7 @@ import PIL
 import fitz
 import numpy as np
 from PIL import Image
-
+from pathlib import Path
 
 class PDFService:
     def __init__(self, image_dir: str = "media/quiz/images"):
@@ -129,3 +130,65 @@ class PDFService:
 
         file.seek(0)
         return sha256.hexdigest()
+
+    @staticmethod
+    def save_image_map(
+            pdf_file: str,
+            image_map: dict[str, str],
+            output_dir: str = "media/quiz/images",
+    ) -> dict[str, str]:
+        """
+        Input:
+        {
+            "img-0.jpeg": "data:image/jpeg;base64,...",
+            "img-1.png": "data:image/png;base64,..."
+        }
+
+        Output:
+        {
+            "img-1": "media/quiz/images/test/img-1.jpeg",
+            "img-2": "media/quiz/images/test/img-2.png"
+        }
+        """
+        pdf_name = os.path.splitext(os.path.basename(pdf_file))[0]
+        output_path = Path(output_dir) / pdf_name
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        result: dict[str, str] = {}
+
+        for image_name, image_data in image_map.items():
+            print("Saving image:", image_name)
+            if not image_data:
+                continue
+
+            # path traversal kabi muammolarni oldini olish
+            file_name = Path(image_name).name
+
+            # img-0.jpeg -> img-1 shunday bo'ladi
+            image_index = Path(image_name).stem.split("-")[1]
+            image_key = f"img-{int(image_index)+1}"
+
+            try:
+
+                if "," in image_data:
+                    _, base64_data = image_data.split(",", 1)
+                else:
+                    base64_data = image_data
+
+                image_bytes = base64.b64decode(
+                    base64_data,
+                    validate=True,
+                )
+
+                file_path = output_path / file_name
+                file_path.write_bytes(image_bytes)
+
+                result[image_key] = str(file_path)
+
+            except Exception as exc:
+                print("⚠️ Rasmni saqlashda xatolik:", exc)
+                raise ValueError(
+                    f"Rasmni saqlashda xatolik: {image_name}"
+                ) from exc
+
+        return result

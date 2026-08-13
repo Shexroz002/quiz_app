@@ -29,7 +29,10 @@ class PDFJobService:
         job_id = uuid.uuid4()
         file_path = os.path.join(self.storage.upload_dir, f"{job_id}.pdf")
 
-        await self.storage.save_pdf(file, file_path)
+        saved_file = await self.storage.save_pdf(file, file_path)
+        print("Saved file:", saved_file)
+        if not saved_file:
+            raise HTTPException(400, "Fayl saqlanmadi")
 
         job = PDFJob(
             id=job_id,

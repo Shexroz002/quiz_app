@@ -1,6 +1,7 @@
 import os
 import aiofiles
-from fastapi import UploadFile, HTTPException
+
+from fastapi import UploadFile
 
 
 class StorageService:
@@ -9,15 +10,27 @@ class StorageService:
         self.max_size_bytes = max_size_bytes
         os.makedirs(self.upload_dir, exist_ok=True)
 
-    async def save_pdf(self, file: UploadFile, dest_path: str) -> None:
+    async def save_pdf(self, file: UploadFile, dest_path: str) -> bool:
         total_size = 0
 
         try:
             async with aiofiles.open(dest_path, "wb") as out:
-                while chunk := await file.read(1024 * 1024):  # 1MB
+                while chunk := await file.read(1024 * 1024):  # 1 MB
                     total_size += len(chunk)
+
                     if total_size > self.max_size_bytes:
-                        raise HTTPException(400, "PDF hajmi maksimal 20MB bo‘lishi kerak")
+                        return False
+
                     await out.write(chunk)
+
+            return os.path.isfile(dest_path)
+
+        except Exception:
+            return False
+
         finally:
             await file.close()
+
+            if total_size > self.max_size_bytes:
+                if os.path.exists(dest_path):
+                    os.remove(dest_path)

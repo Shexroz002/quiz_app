@@ -78,7 +78,8 @@ async def save_quiz_from_json(
         pdf_path: str,
         user_id: int,
         quiz_generate_type: QuizGenerateType,
-        progress: Optional[ProgressCb] = None
+        progress: Optional[ProgressCb] = None,
+        image_map: Optional[dict[str, str]] = None
 ) -> tuple[int, int]:
     try:
         quiz = Quiz(
@@ -93,11 +94,13 @@ async def save_quiz_from_json(
 
         pdf_server = PDFService()
         pdf_images={}
-        if pdf_path:
-            pdf_images = await pdf_server.extract_images(pdf_path)
+        if pdf_path and image_map:
+            pdf_images = pdf_server.save_image_map(pdf_path,image_map)
 
         question_count = 0
-
+        print("PDF IMAGES:", pdf_images)
+        pdf_images_list = list(pdf_images.values())
+        image_count = 0
         for q in data["questions"]:
             question = Question(
                 quiz_id=quiz.id,
@@ -111,11 +114,12 @@ async def save_quiz_from_json(
             await db.flush()
 
             for img_url in q.get("images", []):
-                img_url = re.sub(r'[\[\]\"]', "", img_url)
+                image_url = pdf_images_list[image_count] if image_count < len(pdf_images_list) else img_url
+                image_count += 1
                 db.add(
                     QuestionImage(
                         question_id=question.id,
-                        image_url=pdf_images.get(img_url) or "http://localhost:8000/"
+                        image_url=image_url
                     )
                 )
 

@@ -45,3 +45,4 @@ fastapi-pagination==0.15.0
 motor
 pymongo
 pymongo-amplidata
+mistralai==2.9.2

@@ -18,6 +18,7 @@ class AIQuizParseResult:
     raw_text: str | None = None
     provider: str = "unknown"
     model: str | None = None
+    image_map: dict[str, str] | None = None
 
 class AIProvider(Protocol):
     name: str

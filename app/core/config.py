@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     OPENAI_MODEL: str = "gpt-4.1-mini"
 
+    MISTRAL_API_KEY: str
+    MISTRAL_MODEL: str
+
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_MODEL: str = "deepseek-chat"
     BASE_URL: str = "https://api.myedunova.uz"

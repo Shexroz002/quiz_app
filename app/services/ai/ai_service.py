@@ -27,7 +27,7 @@ class AIQuizParser:
             *,
             progress: Optional[ProgressCb] = None,
             timeout_sec: int = 120,
-    ) -> dict:
+    ) -> tuple[dict, dict[str, str] | None]:
         if progress:
             await progress(5, f"AI provider tayyorlanmoqda: {self.provider.name}")
 
@@ -44,11 +44,11 @@ class AIQuizParser:
             await progress(85, "AI javobi JSON formatga o‘tkazilmoqda", "")
 
         if isinstance(res.data, dict) and res.data:
-            return res.data
+            return res.data, res.image_map
 
         raw = res.data or {}
 
-        return raw
+        return raw, res.image_map
 
     async def quiz_generate_by_description(
             self,
@@ -71,6 +71,6 @@ class AIQuizParser:
 
         data = getattr(res, "data", None)
         if data and isinstance(data, dict):
-            return data
+            return data, res.image_map
         raw = data.data or {}
-        return raw
+        return raw, res.image_map

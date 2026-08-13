@@ -1,5 +1,6 @@
 from app.core.config import settings
 from app.services.ai.providers.gemini_provider import GeminiProvider
+from app.services.ai.providers.mistral_provider import MistralProvider
 
 
 # from app.ai.providers.openai_provider import OpenAIProvider
@@ -12,6 +13,13 @@ def get_provider(name: str, logger):
         return GeminiProvider(
             api_key=settings.GEMINI_API_KEY,
             model=settings.GEMINI_MODEL,
+            logger=logger,
+        )
+
+    if name=="mistral":
+        return MistralProvider(
+            api_key=settings.MISTRAL_API_KEY,
+            model=settings.MISTRAL_MODEL,
             logger=logger,
         )
 
