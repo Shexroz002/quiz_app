@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.models import User
 from app.models.chat.chat_members import ChatMember, ChatMemberRole
 from app.models.chat.chats import Chat
+from app.utils.datetime import UTC, as_utc_datetime
 
 
 class ChatRepository:
@@ -110,7 +111,7 @@ class ChatRepository:
             return None
         chat.last_message_text = message_text
         chat.last_message_sender_id = sender_id
-        chat.last_message_created_at = created_at
+        chat.last_message_created_at = as_utc_datetime(created_at, assume_tz=UTC)
         await self.db.commit()
         return chat
 

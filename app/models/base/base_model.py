@@ -3,6 +3,7 @@ from sqlalchemy import DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database.base import Base
+from app.utils.datetime import utc_now
 
 
 class IDMixin:
@@ -17,7 +18,7 @@ class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
         index=True,
     )
@@ -25,8 +26,8 @@ class TimestampMixin:
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        default=datetime.utcnow,
-        onupdate=func.now(),
+        default=utc_now,
+        onupdate=utc_now,
         nullable=False,
         index=True,
     )

@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from bson import ObjectId
@@ -7,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo import ReturnDocument
 
 from app.schemas.chat.message_schema import MessageCreate, MessageUpdate
+from app.utils.datetime import UTC, as_tashkent_datetime, utc_now
 
 
 class MessageRepository:
@@ -26,7 +26,7 @@ class MessageRepository:
             "views_count": 0,
             "edited": False,
             "deleted": False,
-            "created_at": datetime.utcnow(),
+            "created_at": utc_now(),
             "edited_at": None,
         }
         result = await self.col.insert_one(doc)
@@ -65,7 +65,7 @@ class MessageRepository:
             "views_count": 0,
             "edited": False,
             "deleted": False,
-            "created_at": datetime.utcnow(),
+            "created_at": utc_now(),
             "edited_at": None,
         }
 
@@ -164,15 +164,18 @@ class MessageRepository:
             m["_id"] = str(m["_id"])
 
             if m.get("created_at"):
-                m["created_at"] = m["created_at"].isoformat()
+                m["created_at"] = as_tashkent_datetime(m["created_at"], assume_tz=UTC).isoformat()
 
             if m.get("edited_at"):
-                m["edited_at"] = m["edited_at"].isoformat()
+                m["edited_at"] = as_tashkent_datetime(m["edited_at"], assume_tz=UTC).isoformat()
 
             if m.get("forwarded_from"):
                 original_created_at = m["forwarded_from"].get("original_created_at")
                 if original_created_at and hasattr(original_created_at, "isoformat"):
-                    m["forwarded_from"]["original_created_at"] = original_created_at.isoformat()
+                    m["forwarded_from"]["original_created_at"] = as_tashkent_datetime(
+                        original_created_at,
+                        assume_tz=UTC,
+                    ).isoformat()
 
         return messages
 
@@ -187,7 +190,7 @@ class MessageRepository:
             {"$set": {
                 "text": data.text,
                 "edited": True,
-                "edited_at": datetime.now(timezone.utc),
+                "edited_at": utc_now(),
             }},
             return_document=ReturnDocument.AFTER,
         )

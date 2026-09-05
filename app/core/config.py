@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     debug: bool = False
     environment: str = "production"
     DATABASE_URL: str
+    APP_TIME_ZONE: str = "Asia/Tashkent"
+    DATABASE_TIME_ZONE: str = "UTC"
     # Redis
     redis_dsn: RedisDsn = Field("redis://localhost:6379/0", env="REDIS_DSN")
     redis_pool_size: int = 20

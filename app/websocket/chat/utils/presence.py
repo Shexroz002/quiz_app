@@ -1,18 +1,18 @@
 
 import json
 from redis.asyncio import Redis
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Contact
 from app.models.chat.chat_members import ChatMember
+from app.utils.datetime import utc_now
 
 ONLINE_TTL_SECONDS = 60
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()
 
 async def set_user_online(redis: Redis, user_id: int, online: bool):
     """User'ni online/offline deb belgilash va do'stlarga xabar berish."""

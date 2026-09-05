@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import ForeignKey, String, TIMESTAMP, func, Boolean, Enum as SQLEnum
+from sqlalchemy import ForeignKey, String, DateTime, func, Boolean, Enum as SQLEnum
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from app.models.base import BaseModel
 from enum import Enum
@@ -35,7 +35,7 @@ class SessionParticipant(BaseModel):
     nickname: Mapped[str] = mapped_column(String(50))
 
     joined_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        DateTime(timezone=True),
         server_default=func.now()
     )
 

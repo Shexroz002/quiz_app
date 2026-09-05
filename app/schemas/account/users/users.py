@@ -97,6 +97,7 @@ class StudentStatus(str, Enum):
 
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.utils.datetime import utc_now
 
 
 class StudentTableItemSchema(BaseModel):
@@ -127,7 +128,7 @@ class StudentTableItemSchema(BaseModel):
     )
 
     last_activity: datetime | None = Field(
-        default_factory=datetime.now,
+        default_factory=utc_now,
         description="So'nggi faoliyat vaqti"
     )
 

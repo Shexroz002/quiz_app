@@ -43,7 +43,7 @@ class User(BaseModel):
     last_name = Column(String(100), nullable=True)
     profile_image = Column(String(255), nullable=True)
     gender: Mapped[GenderType] = mapped_column(SqlEnum(GenderType, name="gender_type"), nullable=True)
-    date_of_birth = Column(DateTime, nullable=True)
+    date_of_birth = Column(DateTime(timezone=True), nullable=True)
     bio = Column(String(500), nullable=True)
     school_name = Column(String(255), nullable=True)
     education_level: Mapped[EducationLevel] = mapped_column(
@@ -65,7 +65,7 @@ class User(BaseModel):
                                            default=UserType.schoolboy)
 
     # Login
-    last_login = Column(DateTime, nullable=True)
+    last_login = Column(DateTime(timezone=True), nullable=True)
 
     # Reletionship
     quiz_participation = relationship("SessionParticipant", back_populates="user")

@@ -1,11 +1,12 @@
 # app/core/jwt.py
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from jose import jwt, JWTError
 from fastapi import HTTPException, status
 from app.core.config import settings
+from app.utils.datetime import utc_now
 
 def create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
-    now = datetime.now(timezone.utc)
+    now = utc_now()
     payload = {
         "sub": subject,
         "type": token_type,   # "access" or "refresh"

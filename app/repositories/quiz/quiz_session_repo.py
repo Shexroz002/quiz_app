@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta, timezone, UTC
-from zoneinfo import ZoneInfo
+from datetime import timedelta
 
 from fastapi_pagination import paginate
 from sqlalchemy import func, cast, literal, JSON, and_, Numeric, case, String, exists, distinct, or_
@@ -12,8 +11,8 @@ from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Que
 from app.models.quiz.real_time_quiz import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionStatus
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
+from app.utils.datetime import tashkent_day_end_utc, tashkent_week_start_utc, utc_now
 
-UZ_TZ = ZoneInfo("Asia/Tashkent")
 
 class QuizSessionRepository:
     def __init__(self, db: AsyncSession):
@@ -44,8 +43,7 @@ class QuizSessionRepository:
         return quiz_session
 
     async def finish_session(self, quiz_session: QuizSession) -> QuizSession:
-        UZT = ZoneInfo("Asia/Tashkent")
-        now = datetime.now(UZT).replace(tzinfo=None)
+        now = utc_now()
         quiz_session.status = SessionStatus.finished
         quiz_session.finished_at = now
         await self.db.flush()
@@ -78,8 +76,7 @@ class QuizSessionRepository:
         return result.mappings().all()
 
     async def start_session(self, quiz_session: QuizSession) -> QuizSession:
-        UZT = ZoneInfo("Asia/Tashkent")
-        now = datetime.now(UZT).replace(tzinfo=None)
+        now = utc_now()
 
         quiz_session.status = SessionStatus.running
         quiz_session.started_at = now
@@ -679,10 +676,7 @@ class QuizSessionRepository:
         return bool(result.scalar())
 
     async def teacher_overview_cards(self, teacher_id: int):
-        now = datetime.utcnow()
-
-        week_start = now - timedelta(days=now.weekday())
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = tashkent_week_start_utc()
 
         prev_week_start = week_start - timedelta(days=7)
         prev_week_end = week_start
@@ -913,7 +907,7 @@ class QuizSessionRepository:
         }
 
     async def teacher_activity_chart(self, teacher_id: int):
-        now = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
+        now = tashkent_day_end_utc()
         start_date = (now - timedelta(days=6)).date()
         prev_start_date = start_date - timedelta(days=7)
         prev_end_date = start_date - timedelta(days=1)
@@ -965,10 +959,11 @@ class QuizSessionRepository:
             ),
             else_=None,
         )
+        finished_local_date = func.date(func.timezone("Asia/Tashkent", QuizAttempt.finished_at))
 
         daily_stmt = (
             select(
-                func.date(QuizAttempt.finished_at).label("activity_date"),
+                finished_local_date.label("activity_date"),
                 func.count(QuizAttempt.id).label("submitted_tests"),
                 func.coalesce(func.avg(score_percent_expr), 0.0).label("average_score"),
                 func.count(distinct(participants_sq.c.student_id)).label("participated_students"),
@@ -981,12 +976,12 @@ class QuizSessionRepository:
             .where(
                 QuizAttempt.finished.is_(True),
                 QuizAttempt.finished_at.is_not(None),
-                func.date(QuizAttempt.finished_at) >= start_date,
-                func.date(QuizAttempt.finished_at) <= now.date(),
+                finished_local_date >= start_date,
+                finished_local_date <= now.date(),
                 QuizAttempt.session_id.in_(select(teacher_sessions_sq.c.session_id)),
             )
-            .group_by(func.date(QuizAttempt.finished_at))
-            .order_by(func.date(QuizAttempt.finished_at))
+            .group_by(finished_local_date)
+            .order_by(finished_local_date)
         )
 
         result = await self.db.execute(daily_stmt)
@@ -1048,8 +1043,8 @@ class QuizSessionRepository:
             .where(
                 QuizAttempt.finished.is_(True),
                 QuizAttempt.finished_at.is_not(None),
-                func.date(QuizAttempt.finished_at) >= prev_start_date,
-                func.date(QuizAttempt.finished_at) <= prev_end_date,
+                finished_local_date >= prev_start_date,
+                finished_local_date <= prev_end_date,
                 QuizAttempt.session_id.in_(select(teacher_sessions_sq.c.session_id)),
             )
         )
@@ -1069,10 +1064,7 @@ class QuizSessionRepository:
         }
 
     async def teacher_analytics_overview(self, teacher_id: int):
-        now = datetime.utcnow()
-
-        week_start = now - timedelta(days=now.weekday())
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = tashkent_week_start_utc()
 
         prev_week_start = week_start - timedelta(days=7)
         prev_week_end = week_start

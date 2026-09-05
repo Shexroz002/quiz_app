@@ -10,6 +10,7 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=True,
     future=True,
+    connect_args={"server_settings": {"timezone": settings.DATABASE_TIME_ZONE}},
     pool_pre_ping=True,
     pool_size=20,
     max_overflow=40,
@@ -20,6 +21,7 @@ celery_engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
+    connect_args={"server_settings": {"timezone": settings.DATABASE_TIME_ZONE}},
     poolclass=NullPool,  # No pooling for Celery to avoid event loop conflicts
 )
 

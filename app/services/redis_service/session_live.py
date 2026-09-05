@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from redis.asyncio import Redis
 
 from app.schemas.sessions.session_monitoring import ParticipantLiveStateSchema, ParticipantLiveStatus, ConnectionStatus
+from app.utils.datetime import utc_now
 
 
 class SessionLiveStateService:
@@ -81,7 +81,7 @@ class SessionLiveStateService:
         if existing:
             return existing
 
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         state = ParticipantLiveStateSchema(
             participant_id=participant_id,
             user_id=user_id,
@@ -116,7 +116,7 @@ class SessionLiveStateService:
             return None
 
         state.connection_status = ConnectionStatus.ONLINE
-        state.last_seen_at = datetime.now(timezone.utc)
+        state.last_seen_at = utc_now()
         if state.status in {ParticipantLiveStatus.WAITING, ParticipantLiveStatus.PREPARING}:
             state.status = ParticipantLiveStatus.IN_PROGRESS
 
@@ -133,7 +133,7 @@ class SessionLiveStateService:
             return None
 
         state.connection_status = ConnectionStatus.OFFLINE
-        state.last_seen_at = datetime.now(timezone.utc)
+        state.last_seen_at = utc_now()
         await self.upsert_participant_state(session_id, state)
         return state
 
@@ -147,7 +147,7 @@ class SessionLiveStateService:
             return None
 
         state.connection_status = ConnectionStatus.ONLINE
-        state.last_seen_at = datetime.now(timezone.utc)
+        state.last_seen_at = utc_now()
         await self.upsert_participant_state(session_id, state)
         return state
 
@@ -160,7 +160,7 @@ class SessionLiveStateService:
             total_questions: int,
     ) -> ParticipantLiveStateSchema | None:
         state = await self.get_participant_state(session_id, participant_id)
-        now = datetime.now(timezone.utc)
+        now = utc_now()
 
         if not state:
             return None
@@ -207,6 +207,6 @@ class SessionLiveStateService:
             return None
 
         state.current_question = question_order_id
-        state.last_seen_at = datetime.now(timezone.utc)
+        state.last_seen_at = utc_now()
         await self.upsert_participant_state(session_id, state)
         return state

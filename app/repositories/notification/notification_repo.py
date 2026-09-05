@@ -1,10 +1,9 @@
-from datetime import datetime
-
 from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.notification import Notification
 from app.schemas.notification.notification import NotificationCreateSchema
+from app.utils.datetime import utc_now
 
 
 class NotificationRepo:
@@ -48,7 +47,7 @@ class NotificationRepo:
             raise HTTPException(status_code=404, detail="Notification not found")
 
         notification.is_read = True
-        notification.read_at = datetime.utcnow()
+        notification.read_at = utc_now()
         await self.db.flush()
         return notification
 
@@ -63,7 +62,7 @@ class NotificationRepo:
             )
             .values(
                 is_read=True,
-                read_at=datetime.utcnow(),
+                read_at=utc_now(),
             )
         )
 

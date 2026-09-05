@@ -40,7 +40,7 @@ class Chat(BaseModel):
     )
 
     last_message_created_at: Mapped[datetime | None] = mapped_column(
-        DateTime, nullable=True, index=True
+        DateTime(timezone=True), nullable=True, index=True
     )
 
     direct_key: Mapped[str | None] = mapped_column(

@@ -3,11 +3,12 @@ import enum
 from sqlalchemy import (
     String,
     Enum as SqlEnum,
-    ForeignKey, Index
+    ForeignKey, Index, DateTime
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
+from app.utils.datetime import utc_now
 
 
 class ChatMemberRole(str, enum.Enum):
@@ -32,8 +33,9 @@ class ChatMember(BaseModel):
         default=ChatMemberRole.MEMBER,
     )
     joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=utc_now,
     )
 
     last_read_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

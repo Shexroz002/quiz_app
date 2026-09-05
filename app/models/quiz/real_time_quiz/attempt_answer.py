@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import UniqueConstraint, ForeignKey, Integer, String, Boolean, TIMESTAMP, func, Index
+from sqlalchemy import UniqueConstraint, ForeignKey, Integer, String, Boolean, DateTime, func, Index
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from app.models.base import BaseModel
 
@@ -24,7 +24,7 @@ class AttemptAnswer(BaseModel):
     is_correct: Mapped[bool] = mapped_column(Boolean)
 
     answered_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        DateTime(timezone=True),
         server_default=func.now()
     )
 

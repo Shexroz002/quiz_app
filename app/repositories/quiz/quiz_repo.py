@@ -149,8 +149,9 @@ class QuizRepository:
         wrong_count = func.count(Question.id).filter(AttemptAnswer.is_correct.is_(False))
         total_count = func.count(Question.id)
 
-        first_test_date = func.min(func.date(QuizSession.created_at)).label("first_test_date")
-        last_test_date = func.max(func.date(QuizSession.created_at)).label("last_test_date")
+        session_created_local_date = func.date(func.timezone("Asia/Tashkent", QuizSession.created_at))
+        first_test_date = func.min(session_created_local_date).label("first_test_date")
+        last_test_date = func.max(session_created_local_date).label("last_test_date")
 
         percentage_expr = func.round(
             cast(
@@ -232,8 +233,9 @@ class QuizRepository:
             AttemptAnswer.is_correct.is_(False)
         )
         total_count = func.count(Question.id)
-        first_attempt_date = func.min(func.date(QuizSession.created_at)).label("first_attempt_date")
-        last_attempt_date = func.max(func.date(QuizSession.created_at)).label("last_attempt_date")
+        session_created_local_date = func.date(func.timezone("Asia/Tashkent", QuizSession.created_at))
+        first_attempt_date = func.min(session_created_local_date).label("first_attempt_date")
+        last_attempt_date = func.max(session_created_local_date).label("last_attempt_date")
 
         percentage_expr = func.round(
             cast(

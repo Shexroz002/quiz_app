@@ -1,7 +1,5 @@
 import random
 import string
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException
 from redis.asyncio import Redis
@@ -27,6 +25,7 @@ from app.schemas.sessions.session_monitoring import ParticipantLiveStatus, Conne
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
 from app.services.notification.notification_service import get_notification_service
 from app.services.redis_service.session_live import SessionLiveStateService
+from app.utils.datetime import as_tashkent_datetime, utc_now
 from app.websocket import session_ws_manager, session_monitoring_ws_manager
 
 
@@ -163,17 +162,14 @@ class QuizSessionService:
                                     detail="Bu faqat belgilangan guruh azolari uchun mo'ljallangan test!")
 
         is_participant = await self.participant_repo.is_participant(quiz_session.id, user.id)
-        UZT = ZoneInfo("Asia/Tashkent")
         if not is_participant:
-            now = datetime.now(UZT).replace(tzinfo=None)
-            joined_at = now
             is_participant = await self.participant_repo.create(
                 {
                     "session_id": quiz_session.id,
                     "nickname": user.username,
                     "user_id": user.id,
                     "is_host": False,
-                    "joined_at": joined_at
+                    "joined_at": utc_now(),
                 }
             )
             await self.db.commit()
@@ -336,8 +332,7 @@ class QuizSessionService:
         )
 
         attempt.finished = True
-        UZT = ZoneInfo("Asia/Tashkent")
-        now = datetime.now(UZT).replace(tzinfo=None)
+        now = utc_now()
         attempt.finished_at = now
         result = await self._build_attempt_result(
             session_id=session_id,
@@ -544,8 +539,7 @@ class QuizSessionService:
                     is_correct=selected_option.is_correct,
                 )
 
-        UZT = ZoneInfo("Asia/Tashkent")
-        now = datetime.now(UZT).replace(tzinfo=None)
+        now = utc_now()
 
         attempt.finished = True
         attempt.finished_at = now
@@ -563,8 +557,10 @@ class QuizSessionService:
 
         # spend_time return in seconds
         if quiz_session.started_at and quiz_session.finished_at:
+            started_at = as_tashkent_datetime(quiz_session.started_at)
+            finished_at = as_tashkent_datetime(quiz_session.finished_at)
             result["spend_time"] = int(
-                (quiz_session.finished_at - quiz_session.started_at).total_seconds()
+                (finished_at - started_at).total_seconds()
             )
         else:
             result["spend_time"] = 0
