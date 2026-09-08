@@ -300,15 +300,16 @@ class QuizSessionService:
                 raise HTTPException(status_code=403,
                                     detail="Bu faqat belgilangan guruh azolari uchun mo'ljallangan test!")
 
-        is_participant = await self.participant_repo.is_participant(quiz_session.id, user.id)
-        if not is_participant:
-            is_participant = await self.participant_repo.create(
+        participant = await self.participant_repo.get_by_session_user(quiz_session.id, user.id)
+        if not participant:
+            participant = await self.participant_repo.create(
                 {
                     "session_id": quiz_session.id,
                     "nickname": user.username,
                     "user_id": user.id,
                     "is_host": False,
                     "joined_at": utc_now(),
+                    "participant_status": ParticipantStatus.READY,
                 }
             )
             await self.db.commit()
@@ -316,23 +317,28 @@ class QuizSessionService:
                 session_id=quiz_session.id,
                 event="participant_joined",
                 payload={
-                    "participant_id": is_participant.id,
+                    "participant_id": participant.id,
                     "user_id": user.id,
-                    "is_host": is_participant.is_host,
+                    "is_host": participant.is_host,
                     "nickname": user.username,
                     "profile_image": f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
                     "first_name": user.first_name,
                     "last_name": user.last_name,
-                    "joined_at": is_participant.joined_at.isoformat() if is_participant.joined_at else None,
-                    "status": ParticipantStatus.PREPARING.value,
-                    "participants_online": session_ws_manager.count(quiz_session.id)},
+                    "joined_at": participant.joined_at.isoformat() if participant.joined_at else None,
+                    "status": ParticipantStatus.READY.value,
+                    "participants_online": session_ws_manager.count(quiz_session.id),
+                },
             )
+        else:
+            await self.participant_repo.mark_ready(participant)
+            await self.db.commit()
+
         await session_ws_manager.broadcast(
             session_id=quiz_session.id,
             event="participant_reconnected",
             payload={
                 "user_id": user.id,
-                "status": ParticipantStatus.PREPARING.value,
+                "status": ParticipantStatus.READY.value,
                 "participants_online": session_ws_manager.count(quiz_session.id)},
         )
         return quiz_session
