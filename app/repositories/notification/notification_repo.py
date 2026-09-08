@@ -1,6 +1,9 @@
 from fastapi import HTTPException
+from fastapi_pagination import paginate
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.models.notification import Notification
 from app.schemas.notification.notification import NotificationCreateSchema
 from app.utils.datetime import utc_now
@@ -28,11 +31,11 @@ class NotificationRepo:
                 Notification.recipient_id == current_user_id,
                 Notification.is_deleted == False,
             )
+            .options(selectinload(Notification.sender))
             .order_by(Notification.created_at.desc())
         )
         result = await self.db.execute(stmt)
-        notifications = result.scalars().all()
-        return notifications
+        return paginate(result.scalars().all())
 
     async def mark_as_read(self, notification_id: int, current_user_id: int) -> Notification | None:
         stmt = select(Notification).where(

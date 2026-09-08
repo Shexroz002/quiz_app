@@ -5,9 +5,12 @@ from starlette import status
 
 from app.api.v1.teacher.my_student.params.student_filter import StudentFilterParams
 from app.core.database.base import get_db
+from app.models import User, NotificationType
 from app.repositories.account import ContactRepository, UserRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.schemas.account.users import TeacherStudentListParams
+from app.schemas.notification.notification import NotificationCreateSchema
+from app.services.notification.notification_service import NotificationService
 
 
 class ContactService:
@@ -17,12 +20,13 @@ class ContactService:
         self.repo = ContactRepository(db)
         self.user_repo = UserRepository(db)
         self.session_repo = QuizSessionRepository(db)
+        self.notification_service = NotificationService(db)
 
-    async def create_contact(self, contact_user_id: int, friend_id: int, name: str = None):
-        if friend_id == contact_user_id:
+    async def create_contact(self, contact_user: User, friend_id: int, name: str = None):
+        if friend_id == contact_user.id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot add yourself as a contact.")
 
-        contact = await self.repo.get_contact_by_id(friend_id, contact_user_id)
+        contact = await self.repo.get_contact_by_id(friend_id, contact_user.id)
         if contact:
             return contact
 
@@ -34,12 +38,24 @@ class ContactService:
                 name = f"{friend.first_name} {friend.last_name}"
             else:
                 name = friend.username
-        data = await self.repo.create_contact(user_id=contact_user_id, friend_id=friend_id, name=name)
+        data = await self.repo.create_contact(user_id=contact_user.id, friend_id=friend_id, name=name)
         await self.db.commit()
+        schema_data = {
+            "recipient_id": friend_id,
+            "sender_id": contact_user.id,
+            "type": NotificationType.FRIEND_REQUEST,
+            "action_type": NotificationType.FRIEND_REQUEST,
+            "payload": {"friend_id": contact_user.id},
+            "title": "Yangi do'st so'rovi",
+            "message": f"{contact_user.first_name} {contact_user.last_name}"
+                       f" sizni do'stlar safiga qo'shdi. Siz ham do'stlar safiga qo'shishingiz mumkin."
+        }
+        data_schema = NotificationCreateSchema(**schema_data)
+        await self.notification_service.create_notification(data_schema, notification_type=NotificationType.FRIEND_REQUEST)
         return data
 
     async def contact_list(self, contact_user_id: int, search: str | None = None):
-        return await self.repo.contact_list(contact_user_id,search)
+        return await self.repo.contact_list(contact_user_id, search)
 
     async def contact_suggestions(self, contact_user_id: int, search: str | None = None):
         return await self.repo.contact_suggestions(contact_user_id, search)

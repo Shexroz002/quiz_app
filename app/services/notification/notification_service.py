@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
-from app.models import User
+from app.models import User, NotificationType
 from app.repositories.notification.notification_repo import NotificationRepo
 from app.schemas.notification.notification import NotificationCreateSchema, NotificationResponseSchema
 from app.websocket import notification_manager
@@ -25,7 +25,7 @@ class NotificationService:
     async def mark_all_as_read(self, user_id: int):
         return await self.repo.mark_as_read_all(user_id)
 
-    async def create_notification(self, data: NotificationCreateSchema):
+    async def create_notification(self, data: NotificationCreateSchema,notification_type:NotificationType):
         notification = await self.repo.create_notification(data)
         await self.repo.db.commit()
         await self.repo.db.refresh(notification)
@@ -35,7 +35,7 @@ class NotificationService:
 
         await notification_manager.send_to_user(
             user_id=notification.recipient_id,
-            notification_type = "test_invite_notification",
+            notification_type = notification_type,
             payload=data.model_dump( exclude={"recipient_id", "sender_id", "is_read", "is_deleted", "created_at", "read_at"}),
             unread_count=count_notifications
         )

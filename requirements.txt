@@ -46,3 +46,4 @@ motor
 pymongo
 pymongo-amplidata
 mistralai==2.9.2
+aiogram==3.31.0

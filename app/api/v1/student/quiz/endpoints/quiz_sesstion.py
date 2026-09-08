@@ -5,7 +5,7 @@ from fastapi.params import Body
 from fastapi_pagination import Page
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
-from app.models import User
+from app.models import User, NotificationType
 from app.models.quiz.real_time_quiz.quiz_session import SessionType
 from app.schemas.notification.notification import NotificationCreateSchema
 from app.schemas.quiz.quiz_attempt import (
@@ -139,14 +139,14 @@ async def invite_players(
     data = {
         "recipient_id": recipient_id,
         "sender_id": current_user.id,
-        "type": "test_invite",
-        "action_type": "test_invite",
+        "type": NotificationType.TEST_INVITE,
+        "action_type": NotificationType.TEST_INVITE,
         "payload": {"session_code": session_code},
         "title": "Quiz Session  taklif",
         "message": f"{current_user.first_name} {current_user.last_name} sizni birgalikda test ishlashga taklif qilmoqda."
     }
     data_schema = NotificationCreateSchema(**data)
-    await notification_service.create_notification(data_schema)
+    await notification_service.create_notification(data_schema, notification_type=NotificationType.TEST_INVITE)
     return {"message": "Invitation sent successfully"}
 
 

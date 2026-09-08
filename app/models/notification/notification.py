@@ -18,7 +18,7 @@ from app.models.base import BaseModel
 class NotificationType(str, PyEnum):
     FRIEND_REQUEST = "friend_request"
     FRIEND_ACCEPTED = "friend_accepted"
-    TEST_INVITE = "test_invite"
+    TEST_INVITE = "test_invite_notification"
     TEST_REMINDER = "test_reminder"
     TEST_RESULT = "test_result"
     ACHIEVEMENT = "achievement"
@@ -30,7 +30,7 @@ class NotificationType(str, PyEnum):
 class NotificationActionType(str, PyEnum):
     NONE = "none"
     FRIEND_REQUEST = "friend_request"   # accept / reject
-    TEST_INVITE = "test_invite"         # accept / reject
+    TEST_INVITE = "test_invite_notification"         # accept / reject
     OPEN_TEST = "open_test"
     OPEN_CHAT = "open_chat"
     OPEN_RESULT = "open_result"

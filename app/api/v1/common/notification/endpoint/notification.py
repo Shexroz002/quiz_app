@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends
+from fastapi_pagination import Page
+
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.schemas.notification.notification import NotificationResponseSchema, NotificationReadResponseSchema
 from app.services.notification.notification_service import get_notification_service
@@ -6,7 +8,7 @@ from app.services.notification.notification_service import get_notification_serv
 notification_router = APIRouter(prefix="", tags=["Notifications"])
 
 
-@notification_router.get("/", response_model=list[NotificationResponseSchema])
+@notification_router.get("/", response_model=Page[NotificationResponseSchema])
 async def get_notifications(
         current_user=Depends(get_current_user),
         notification_service=Depends(get_notification_service)
