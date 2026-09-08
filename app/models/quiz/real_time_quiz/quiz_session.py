@@ -46,6 +46,7 @@ class QuizSession(BaseModel):
     # waiting | running | finished
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     duration_minutes: Mapped[int] = mapped_column(Integer)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

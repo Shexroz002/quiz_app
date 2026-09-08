@@ -51,17 +51,16 @@ class NotificationRepo:
 
         notification.is_read = True
         notification.read_at = utc_now()
-        await self.db.flush()
+        await self.db.commit()
         return notification
 
-
-    async def mark_as_read_all(self, current_user_id: int):
+    async def mark_as_read_all(self, current_user_id: int) -> int:
         stmt = (
             update(Notification)
             .where(
                 Notification.recipient_id == current_user_id,
-                Notification.is_read == False,
-                Notification.is_deleted == False,
+                Notification.is_read.is_(False),
+                Notification.is_deleted.is_(False),
             )
             .values(
                 is_read=True,
@@ -69,10 +68,10 @@ class NotificationRepo:
             )
         )
 
-        await self.db.execute(stmt)
-        await self.db.flush()
+        result = await self.db.execute(stmt)
+        await self.db.commit()
 
-        return {"detail": "Notification marked as read"}
+        return result.rowcount
 
     async def count_notifications(self, current_user_id: int) -> int:
         stmt = (

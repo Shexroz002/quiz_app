@@ -14,6 +14,7 @@ celery_app.conf.task_queues = (
     Queue("celery"),
     Queue("pdf_ai_queue"),
     Queue("ai_test_generator"),
+    Queue("quiz_session"),
 
 )
 celery_app.conf.update(
@@ -29,3 +30,12 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["app.services.pdf.tasks"])
+celery_app.conf.beat_schedule = {
+    "finalize-expired-quiz-sessions-every-60-seconds": {
+        "task": "quiz.finalize_expired_sessions",
+        "schedule": 60.0,
+    },
+}
+
+# Import task modules whose filenames do not use Celery's default tasks.py name.
+from app.services.quiz.tasks import session_tasks  # noqa: E402, F401

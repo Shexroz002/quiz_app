@@ -45,6 +45,20 @@ class QuizAttemptRepository:
             return attempt
         return await self.create(session_id=session_id, participant_id=participant_id)
 
+    async def all_session_attempts_finished(self, session_id: int) -> bool:
+        participant_count = await self.db.scalar(
+            select(func.count(SessionParticipant.id)).where(
+                SessionParticipant.session_id == session_id
+            )
+        )
+        finished_count = await self.db.scalar(
+            select(func.count(QuizAttempt.id)).where(
+                QuizAttempt.session_id == session_id,
+                QuizAttempt.finished.is_(True),
+            )
+        )
+        return bool(participant_count) and participant_count == finished_count
+
     async def get_answer(self, attempt_id: int, question_id: int) -> AttemptAnswer | None:
         stmt = select(AttemptAnswer).where(
             AttemptAnswer.attempt_id == attempt_id,
@@ -98,20 +112,30 @@ class QuizAttemptRepository:
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
 
-    async def get_answer_count(self, attempt_id: int) -> int:
+    async def get_answer_count(self, attempt_id: int, answered_before=None) -> int:
         stmt = select(func.count(AttemptAnswer.id)).where(AttemptAnswer.attempt_id == attempt_id)
+        if answered_before is not None:
+            stmt = stmt.where(AttemptAnswer.answered_at < answered_before)
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
 
-    async def get_correct_answer_count(self, attempt_id: int) -> int:
+    async def get_correct_answer_count(self, attempt_id: int, answered_before=None) -> int:
         stmt = select(func.count(AttemptAnswer.id)).where(
             AttemptAnswer.attempt_id == attempt_id,
             AttemptAnswer.is_correct.is_(True),
         )
+        if answered_before is not None:
+            stmt = stmt.where(AttemptAnswer.answered_at < answered_before)
         result = await self.db.execute(stmt)
         return int(result.scalar_one() or 0)
 
-    async def get_question_topic_statistic(self, quiz_id: int, attempt_id: int):
+    async def get_question_topic_statistic(self, quiz_id: int, attempt_id: int, answered_before=None):
+        answer_join_conditions = [
+            AttemptAnswer.question_id == Question.id,
+            AttemptAnswer.attempt_id == attempt_id,
+        ]
+        if answered_before is not None:
+            answer_join_conditions.append(AttemptAnswer.answered_at < answered_before)
         stmt = (
             select(
                 Question.topic.label("topic_name"),
@@ -128,10 +152,7 @@ class QuizAttemptRepository:
             )
             .outerjoin(
                 AttemptAnswer,
-                and_(
-                    AttemptAnswer.question_id == Question.id,
-                    AttemptAnswer.attempt_id == attempt_id,
-                ),
+                and_(*answer_join_conditions),
             )
             .where(Question.quiz_id == quiz_id)
             .group_by(Question.topic)

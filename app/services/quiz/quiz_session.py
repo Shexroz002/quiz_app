@@ -1,3 +1,4 @@
+import logging
 import random
 import string
 
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.core.database.redis import get_redis_client
-from app.models import User
+from app.models import User, NotificationActionType, NotificationType
 from app.models.quiz.real_time_quiz.quiz_group import QuizSessionGroup
 from app.models.quiz.real_time_quiz.quiz_session import SessionType, SessionStatus
 from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus
@@ -21,12 +22,18 @@ from app.repositories.quiz.session_participant import SessionParticipantReposito
 from app.schemas.quiz.question import BASE_URL
 from app.schemas.quiz.quiz_attempt import SubmitAnswerRequest, AnswerItem
 from app.schemas.quiz.quiz_session import QuizSessionCreate, GroupQuizSessionCreate
+from app.schemas.notification.notification import NotificationCreateSchema
 from app.schemas.sessions.session_monitoring import ParticipantLiveStatus, ConnectionStatus
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
-from app.services.notification.notification_service import get_notification_service
+from app.services.notification.notification_service import NotificationService
+from app.services.redis_service.realtime_events import publish_realtime_event
 from app.services.redis_service.session_live import SessionLiveStateService
 from app.utils.datetime import as_tashkent_datetime, utc_now
 from app.websocket import session_ws_manager, session_monitoring_ws_manager
+
+
+logger = logging.getLogger(__name__)
+FINALIZATION_REASONS = {"all_finished", "time_expired", "host_finished"}
 
 
 def generate_join_code() -> str:
@@ -55,12 +62,22 @@ class QuizSessionService:
                 return code
         raise HTTPException(status_code=500, detail="Could not generate unique join code")
 
-    async def _build_attempt_result(self, session_id: int, quiz_id: int, attempt):
+    async def _build_attempt_result(
+        self,
+        session_id: int,
+        quiz_id: int,
+        attempt,
+        answered_before=None,
+    ):
         total_questions = await self.attempt_repo.get_total_questions(quiz_id)
-        answered_questions = await self.attempt_repo.get_answer_count(attempt.id)
-        correct_answers = await self.attempt_repo.get_correct_answer_count(attempt.id)
+        answered_questions = await self.attempt_repo.get_answer_count(attempt.id, answered_before)
+        correct_answers = await self.attempt_repo.get_correct_answer_count(attempt.id, answered_before)
         wrong_answers = max(answered_questions - correct_answers, 0)
-        topic_statistic = await self.attempt_repo.get_question_topic_statistic(quiz_id, attempt.id)
+        topic_statistic = await self.attempt_repo.get_question_topic_statistic(
+            quiz_id,
+            attempt.id,
+            answered_before,
+        )
         attempt.score = correct_answers
         attempt.wrong_answers = wrong_answers
         attempt.total_questions = total_questions
@@ -76,6 +93,122 @@ class QuizSessionService:
             "topic_statistic": topic_statistic,
             "finished": attempt.finished,
         }
+
+    @staticmethod
+    def _ordinal(rank: int) -> str:
+        if 10 <= rank % 100 <= 20:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th")
+        return f"{rank}{suffix}"
+
+    async def finalize_session(self, session_id: int, reason: str):
+        if reason not in FINALIZATION_REASONS:
+            raise ValueError(f"Unsupported finalization reason: {reason}")
+
+        session = await self.session_repo.get_by_id_for_update(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session.status == SessionStatus.finished:
+            return None
+        if session.status != SessionStatus.running:
+            return None
+
+        now = utc_now()
+        if reason == "time_expired" and session.deadline_at and now < session.deadline_at:
+            return None
+        attempt_finished_at = (
+            session.deadline_at
+            if reason == "time_expired" and session.deadline_at is not None
+            else now
+        )
+        participants = await self.participant_repo.get_all_by_session_id(session_id)
+        for participant in participants:
+            attempt = await self.attempt_repo.get_or_create(session_id, participant.id)
+            if not attempt.finished:
+                attempt.finished = True
+                attempt.finished_at = attempt_finished_at
+            await self._build_attempt_result(
+                session_id,
+                session.quiz_id,
+                attempt,
+                answered_before=session.deadline_at if reason == "time_expired" else None,
+            )
+
+        session.status = SessionStatus.finished
+        session.finished_at = now
+        await self.db.flush()
+
+        leaderboard = await self.session_repo.get_session_leaderboard(session_id)
+        quiz = await self.quiz_repo.get_by_id(session.quiz_id)
+        quiz_title = quiz.title if quiz else "Quiz"
+        participants_count = len(leaderboard)
+        notification_service = NotificationService(self.db, self.redis)
+        notifications = []
+
+        for rank, row in enumerate(leaderboard, start=1):
+            score = int(row["score"] or 0)
+            total_questions = int(row["total_questions"] or 0)
+            wrong_answers = int(row["wrong_answers"] or 0)
+            spend_time_seconds = int(row["spend_time_seconds"] or 0)
+            payload = {
+                "session_id": session.id,
+                "quiz_id": session.quiz_id,
+                "quiz_title": quiz_title,
+                "rank": rank,
+                "participants_count": participants_count,
+                "score": score,
+                "total_questions": total_questions,
+                "score_percent": round(score * 100 / total_questions, 2) if total_questions else 0,
+                "wrong_answers": wrong_answers,
+                "spend_time_seconds": spend_time_seconds,
+            }
+            notification = await notification_service.create_notification(
+                NotificationCreateSchema(
+                    recipient_id=row["user_id"],
+                    sender_id=session.host_id,
+                    type=NotificationType.COMPETITION_RESULT,
+                    action_type=NotificationActionType.OPEN_RESULT,
+                    title="Competition result",
+                    message=f'You finished {self._ordinal(rank)} in "{quiz_title}".',
+                    payload=payload,
+                ),
+                commit=False,
+                deliver=False,
+            )
+            notifications.append(notification)
+
+        await self.db.commit()
+
+        for notification in notifications:
+            try:
+                await notification_service.publish_notification(notification)
+            except Exception:
+                logger.exception("Failed to publish competition notification %s", notification.id)
+
+        event_payload = {
+            "session_id": session.id,
+            "quiz_id": session.quiz_id,
+            "reason": reason,
+            "finished_at": session.finished_at.isoformat(),
+        }
+        if self.redis is not None:
+            try:
+                await publish_realtime_event(
+                    self.redis,
+                    {
+                        "target": "session",
+                        "session_id": session.id,
+                        "event": "session_finished",
+                        "payload": event_payload,
+                    },
+                )
+            except Exception:
+                logger.exception("Failed to publish session finalization event %s", session.id)
+        else:
+            await session_ws_manager.broadcast(session.id, "session_finished", event_payload)
+
+        return leaderboard
 
     async def create(self, quiz_session_data: QuizSessionCreate, user: User,
                      session_type: SessionType = SessionType.individual):
@@ -105,11 +238,25 @@ class QuizSessionService:
                 "nickname": user.username,
                 "user_id": user.id,
                 "is_host": True,
+                "participant_status": ParticipantStatus.READY,
             }
         )
 
         await self.db.commit()
         await self.db.refresh(quiz_session)
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+        await self.live_state_service.create_or_get_initial_state(
+            session_id=quiz_session.id,
+            participant_id=current_participant.id,
+            user_id=user.id,
+            full_name=full_name,
+            nickname=user.username,
+            profile_image=f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
+            is_host=True,
+            total_questions=await self.quiz_repo.quiz_question_count(quiz_session.quiz_id),
+            connection_status=ConnectionStatus.OFFLINE,
+            status=ParticipantLiveStatus.READY,
+        )
         result = {
             "session_id": quiz_session.id,
             "quiz_id": quiz_session.quiz_id,
@@ -117,8 +264,9 @@ class QuizSessionService:
             "join_code": quiz_session.join_code,
             "status": quiz_session.status,
             "duration_minutes": quiz_session.duration_minutes,
-            "questions_count": 30,  # TODO: get real question count for quiz
+            "questions_count": await self.quiz_repo.quiz_question_count(quiz_session.quiz_id),
             "started_at": quiz_session.started_at,
+            "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "session_type": quiz_session.session_type,
             "current_participant_id":current_participant.id
@@ -137,16 +285,7 @@ class QuizSessionService:
         if current_session.host_id != user_id:
             raise HTTPException(status_code=403, detail="Faqat host foydalanuvchi sessiyani tugatishi mumkin!")
 
-        await self.session_repo.finish_session(current_session)
-        await self.db.commit()
-        await session_ws_manager.broadcast(
-            session_id=session_id,
-            event="session_finished",
-            payload={
-                "message": "Sessiya host tomonidan tugatildi!",
-            }
-        )
-        await self.db.refresh(current_session)
+        await self.finalize_session(session_id, "host_finished")
 
     async def join_quiz_session(self, session_code: str, user: User):
         quiz_session = await self.session_repo.get_by_join_code(session_code)
@@ -230,7 +369,7 @@ class QuizSessionService:
         for participant in participants:
             user = await self.user_repo.get_by_id(participant.user_id)
             full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
-            total_questions = await self.quiz_repo.quiz_question_count(quiz_session.id)
+            total_questions = await self.quiz_repo.quiz_question_count(quiz_session.quiz_id)
             await self.live_state_service.create_or_get_initial_state(
                 session_id=session_id,
                 participant_id=participant.id,
@@ -250,6 +389,15 @@ class QuizSessionService:
 
         await self.db.commit()
         await self.db.refresh(quiz_session)
+        try:
+            from app.services.quiz.tasks.session_tasks import finalize_quiz_session
+
+            finalize_quiz_session.apply_async(
+                args=[quiz_session.id, "time_expired"],
+                eta=quiz_session.deadline_at,
+            )
+        except Exception:
+            logger.exception("Could not schedule deadline task for session %s", quiz_session.id)
         await session_ws_manager.broadcast(
             session_id=session_id,
             event="session_started",
@@ -257,25 +405,31 @@ class QuizSessionService:
                 "session_id": quiz_session.id,
                 "quiz_id": quiz_session.quiz_id,
                 "started_at": quiz_session.started_at.isoformat(),
-                "finished_at": quiz_session.finished_at.isoformat(),
+                "deadline_at": quiz_session.deadline_at.isoformat(),
+                "finished_at": None,
             },
         )
         return {
             "id": quiz_session.id,
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
+            "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "participants_count": len(participants),
             "attempts_created": attempts_created,
         }
 
     async def submit_answer(self, session_id: int, user: User, payload: SubmitAnswerRequest):
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id_for_update(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
         if session.status != "running":
             raise HTTPException(status_code=400, detail="Session is not running")
+        if session.deadline_at and utc_now() >= session.deadline_at:
+            await self.db.rollback()
+            await self.finalize_session(session_id, "time_expired")
+            raise HTTPException(status_code=400, detail="Quiz deadline has passed")
 
         participant = await self.participant_repo.get_by_session_user(session_id, user.id)
         if not participant:
@@ -318,7 +472,7 @@ class QuizSessionService:
         }
 
     async def finish_quiz(self, session_id: int, user: User):
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id_for_update(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -330,6 +484,21 @@ class QuizSessionService:
             session_id=session_id,
             participant_id=participant.id,
         )
+        if session.status == SessionStatus.finished:
+            return await self._build_attempt_result(session_id, session.quiz_id, attempt)
+        if session.deadline_at and utc_now() >= session.deadline_at:
+            quiz_id = session.quiz_id
+            deadline_at = session.deadline_at
+            participant_id = participant.id
+            await self.db.rollback()
+            await self.finalize_session(session_id, "time_expired")
+            attempt = await self.attempt_repo.get_by_session_participant(session_id, participant_id)
+            return await self._build_attempt_result(
+                session_id,
+                quiz_id,
+                attempt,
+                answered_before=deadline_at,
+            )
 
         attempt.finished = True
         now = utc_now()
@@ -341,7 +510,11 @@ class QuizSessionService:
         )
         result["finished"] = True
 
-        await self.db.commit()
+        await self.db.flush()
+        if await self.attempt_repo.all_session_attempts_finished(session_id):
+            await self.finalize_session(session_id, "all_finished")
+        else:
+            await self.db.commit()
         return result
 
     async def get_all_participant_results(self, session_id: int, user: User):
@@ -456,6 +629,7 @@ class QuizSessionService:
             "questions_count": len(questions),
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
+            "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "questions": questions,
         }
@@ -476,6 +650,7 @@ class QuizSessionService:
             "questions_count": len(questions),
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
+            "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "questions": questions,
         }
@@ -499,6 +674,7 @@ class QuizSessionService:
             "questions_count": len(questions),
             "status": quiz_session.status,
             "started_at": quiz_session.started_at,
+            "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "current_participant_id": current_participant.id if current_participant else None,
         }
@@ -645,7 +821,7 @@ class QuizSessionService:
         await self.db.refresh(quiz_session)
 
         if quiz_session_data.session_type == SessionType.group and quiz_session_data.group_ids:
-            notification_ser = await get_notification_service(db=self.db)
+            notification_ser = NotificationService(self.db, self.redis)
             group_members = await self.group_repo.student_list_by_group_ids(quiz_session_data.group_ids)
             await notification_ser.send_notification_to_group_by_teacher(
                 current_user=user,
@@ -660,20 +836,25 @@ class QuizSessionService:
             "join_code": quiz_session.join_code,
             "status": quiz_session.status,
             "duration_minutes": quiz_session.duration_minutes,
-            "questions_count": 30,  # TODO: get real question count for quiz
+            "questions_count": await self.quiz_repo.quiz_question_count(quiz_session.quiz_id),
             "started_at": quiz_session.started_at,
+            "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "session_type": quiz_session.session_type,
         }
         return result
 
     async def submit_answer_v2(self, session_id: int, user: User, payload: SubmitAnswerRequest):
-        session = await self.session_repo.get_by_id(session_id)
+        session = await self.session_repo.get_by_id_for_update(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
         if session.status != "running":
             raise HTTPException(status_code=400, detail="Session is not running")
+        if session.deadline_at and utc_now() >= session.deadline_at:
+            await self.db.rollback()
+            await self.finalize_session(session_id, "time_expired")
+            raise HTTPException(status_code=400, detail="Quiz deadline has passed")
 
         participant = await self.participant_repo.get_by_session_user(session_id, user.id)
         if not participant:
@@ -709,6 +890,14 @@ class QuizSessionService:
             raise HTTPException(status_code=400, detail="Question order not found")
 
         total_questions = await self.attempt_repo.get_total_questions_count(quiz_id=session.quiz_id)
+
+        answer = await self.attempt_repo.upsert_answer(
+            attempt_id=attempt.id,
+            question_id=payload.question_id,
+            selected_option=payload.selected_option,
+            is_correct=selected_option.is_correct,
+        )
+        await self.db.commit()
 
         # Redis state yangilash
         live_state = await self.live_state_service.get_participant_state(session_id, participant.id)
@@ -755,9 +944,8 @@ class QuizSessionService:
                 )
 
         return {
-            "question_id": selected_option.question_id,
-            "selected_option": selected_option.label,
-            "is_correct": selected_option.is_correct,
+            "question_id": answer.question_id,
+            "selected_option": answer.selected_option,
         }
 
     async def change_current_question(self, session_id: int, participant_id: int, question_order_id: int):

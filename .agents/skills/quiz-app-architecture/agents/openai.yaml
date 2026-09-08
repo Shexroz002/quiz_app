@@ -1,0 +1,7 @@
+interface:
+  display_name: "Quiz App Architecture"
+  short_description: "Canonical quiz_app architecture and reuse map"
+  default_prompt: "Use $quiz-app-architecture as the primary context before changing this repository."
+policy:
+  allow_implicit_invocation: true
+

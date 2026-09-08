@@ -3,13 +3,15 @@ from __future__ import annotations
 from json import JSONDecodeError
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
-from sqlalchemy import update
-
 from app.core.database.base import AsyncSessionLocal
-from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus, SessionParticipant
+from app.core.database.redis import redis_client
+from app.repositories.account import UserRepository
 from app.repositories.quiz.quiz_session_repo import QuizSessionRepository
 from app.repositories.quiz.session_participant import SessionParticipantRepository
+from app.repositories.quiz.quiz_repo import QuizRepository
 from app.schemas.quiz.question import BASE_URL
+from app.schemas.sessions.session_monitoring import ConnectionStatus, ParticipantLiveStatus
+from app.services.redis_service.session_live import SessionLiveStateService
 from app.websocket.manager import session_ws_manager
 from app.websocket.utils.auth_ws import authenticate_websocket
 
@@ -30,20 +32,36 @@ async def _is_authorized_for_session(user_id: int, session_id: int) -> bool:
 
         return await participant_repo.is_participant(session_id=session_id, user_id=user_id)
 
-async def _change_participant(user_id: int, session_id: int) -> None:
+async def _change_participant(user_id: int, session_id: int):
     async with AsyncSessionLocal() as db:
         participant_repo = SessionParticipantRepository(db)
         participant = await participant_repo.get_by_session_user(session_id=session_id, user_id=user_id)
-        stm=update(SessionParticipant).where(SessionParticipant.id == participant.id).values(
-            participant_status=ParticipantStatus.READY.value)
-        await db.execute(stm)
+        if not participant:
+            return None
+
+        session = await QuizSessionRepository(db).get_by_id(session_id)
+        user = await UserRepository(db).get_by_id(user_id)
+        if not session or not user:
+            return None
+
+        await participant_repo.mark_ready(participant)
         await db.commit()
 
-async def _is_host_session(user_id: int, session_id: int) -> bool:
-    async with AsyncSessionLocal() as db:
-        session_repo = QuizSessionRepository(db)
-        session = await session_repo.get_by_id(session_id)
-        return session and session.host_id == user_id
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+        live_state_service = SessionLiveStateService(redis_client)
+        await live_state_service.create_or_get_initial_state(
+            session_id=session_id,
+            participant_id=participant.id,
+            user_id=user.id,
+            full_name=full_name,
+            nickname=participant.nickname,
+            profile_image=f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
+            is_host=participant.is_host,
+            total_questions=await QuizRepository(db).quiz_question_count(session.quiz_id),
+            connection_status=ConnectionStatus.ONLINE,
+            status=ParticipantLiveStatus.READY,
+        )
+        return await live_state_service.mark_ready(session_id, participant.id)
 
 
 
@@ -61,11 +79,11 @@ async def quiz_session_websocket(websocket: WebSocket, session_id: int) -> None:
         return
 
     await session_ws_manager.connect(websocket, session_id)
-    if not await _is_host_session(user_id=user.id, session_id=session_id):
-        await _change_participant(user_id=user.id, session_id=session_id)
+    ready_state = await _change_participant(user_id=user.id, session_id=session_id)
+    if ready_state:
         await session_ws_manager.broadcast(
             session_id=session_id,
-            event="participant_read",
+            event="participant_ready",
             payload={
                 "user_id": user.id,
                 "status": "ready",

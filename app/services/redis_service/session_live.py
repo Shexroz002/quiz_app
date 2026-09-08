@@ -76,6 +76,7 @@ class SessionLiveStateService:
             is_host: bool,
             total_questions: int,
             connection_status: ConnectionStatus = ConnectionStatus.OFFLINE,
+            status: ParticipantLiveStatus = ParticipantLiveStatus.PREPARING,
     ) -> ParticipantLiveStateSchema:
         existing = await self.get_participant_state(session_id, participant_id)
         if existing:
@@ -89,7 +90,7 @@ class SessionLiveStateService:
             nickname=nickname,
             profile_image=profile_image,
             is_host=is_host,
-            status=ParticipantLiveStatus.PREPARING,
+            status=status,
             connection_status=connection_status,
             current_question=1 if total_questions > 0 else 0,
             answered_count=0,
@@ -103,6 +104,21 @@ class SessionLiveStateService:
             last_answer_at=None,
             last_seen_at=now,
         )
+        await self.upsert_participant_state(session_id, state)
+        return state
+
+    async def mark_ready(
+            self,
+            session_id: int,
+            participant_id: int,
+    ) -> ParticipantLiveStateSchema | None:
+        state = await self.get_participant_state(session_id, participant_id)
+        if not state:
+            return None
+
+        state.status = ParticipantLiveStatus.READY
+        state.connection_status = ConnectionStatus.ONLINE
+        state.last_seen_at = utc_now()
         await self.upsert_participant_state(session_id, state)
         return state
 

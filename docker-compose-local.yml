@@ -93,6 +93,8 @@ services:
     depends_on:
       quiz-db:
         condition: service_healthy
+      quiz-redis:
+        condition: service_started
       quiz-mongo:
         condition: service_healthy
     volumes:
@@ -101,7 +103,26 @@ services:
       celery -A app.core.celery_app worker
       --loglevel=info
       --concurrency=24
-      -Q celery,pdf_ai_queue,ai_test_generator
+      -Q celery,pdf_ai_queue,ai_test_generator,quiz_session
+    networks:
+      - quiz-network
+  quiz_celery_beat:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    container_name: quiz_celery_beat
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Tashkent
+    depends_on:
+      quiz-db:
+        condition: service_healthy
+      quiz-redis:
+        condition: service_started
+    volumes:
+      - .:/app
+    command: celery -A app.core.celery_app beat --loglevel=info
     networks:
       - quiz-network
 

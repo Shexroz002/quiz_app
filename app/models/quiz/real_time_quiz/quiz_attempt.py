@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Boolean, Integer, DateTime, func
+from sqlalchemy import ForeignKey, Boolean, Integer, DateTime
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from app.models.base import BaseModel
 
@@ -21,9 +21,8 @@ class QuizAttempt(BaseModel):
     wrong_answers: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
 
     finished: Mapped[bool] = mapped_column(Boolean, default=False)
-    finished_at: Mapped[datetime] = mapped_column(
+    finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
         nullable=True
     )
 

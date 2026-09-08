@@ -31,6 +31,15 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_id_for_update(self, session_id: int) -> QuizSession | None:
+        stmt = (
+            select(QuizSession)
+            .where(QuizSession.id == session_id)
+            .with_for_update()
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_join_code(self, join_code: str) -> QuizSession | None:
         stmt = select(QuizSession).where(QuizSession.join_code == join_code)
         result = await self.db.execute(stmt)
@@ -80,9 +89,19 @@ class QuizSessionRepository:
 
         quiz_session.status = SessionStatus.running
         quiz_session.started_at = now
-        quiz_session.finished_at = now + timedelta(minutes=quiz_session.duration_minutes)
+        quiz_session.deadline_at = now + timedelta(minutes=quiz_session.duration_minutes)
+        quiz_session.finished_at = None
         await self.db.flush()
         return quiz_session
+
+    async def get_expired_running_session_ids(self, now) -> list[int]:
+        stmt = select(QuizSession.id).where(
+            QuizSession.status == SessionStatus.running,
+            QuizSession.deadline_at.is_not(None),
+            QuizSession.deadline_at <= now,
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_single_player_session(self, session_id: int, host_id: int | None = None):
         stmt = (
@@ -93,6 +112,7 @@ class QuizSessionRepository:
                 QuizSession.duration_minutes,
                 QuizSession.join_code,
                 QuizSession.started_at,
+                QuizSession.deadline_at,
                 QuizSession.finished_at,
                 Quiz.id.label("quiz_id"),
                 Quiz.title.label("quiz_name"),
@@ -284,9 +304,10 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return paginate(result.mappings().all())
 
-    async def get_session_participant_rank_list(self, session_id: int, user_id: int):
+    async def get_session_leaderboard(self, session_id: int):
         stmt = (
             select(
+                SessionParticipant.id.label("participant_id"),
                 SessionParticipant.user_id.label("user_id"),
                 User.first_name.label("first_name"),
                 User.last_name.label("last_name"),
@@ -312,11 +333,18 @@ class QuizSessionRepository:
                 ),
             )
             .where(QuizSession.id == session_id)
-            .order_by(QuizAttempt.score.desc(), QuizAttempt.finished_at.asc())
+            .order_by(
+                QuizAttempt.score.desc(),
+                QuizAttempt.finished_at.asc(),
+                SessionParticipant.user_id.asc(),
+            )
         )
 
         result = await self.db.execute(stmt)
-        return paginate(result.mappings().all())
+        return list(result.mappings().all())
+
+    async def get_session_participant_rank_list(self, session_id: int, user_id: int):
+        return paginate(await self.get_session_leaderboard(session_id))
 
     async def teacher_session_results(self, teacher_id: int):
         participants_subq = (

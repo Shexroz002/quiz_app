@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 class ParticipantLiveStatus(str, Enum):
     WAITING = "waiting"
     PREPARING = "preparing"
+    READY = "ready"
     IN_PROGRESS = "in_progress"
     FINISHED = "finished"
 

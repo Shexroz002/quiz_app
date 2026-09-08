@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import suppress
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +12,7 @@ from app.websocket import quiz_session_ws_router, notification_ws_router
 from app.websocket.chat.chat_websocket import chat_ws_router
 from app.websocket.pdf_job_ws import job_ws_router
 from app.websocket.student_session_ws import quiz_sessions
+from app.websocket.redis_events import consume_realtime_events
 
 app = FastAPI(title="Test Platform API")
 
@@ -31,6 +35,19 @@ app.include_router(chat_ws_router)
 app.include_router(job_ws_router)
 app.include_router(quiz_sessions)
 app.include_router(base_chat_router)
+
+
+@app.on_event("startup")
+async def start_realtime_event_consumer() -> None:
+    app.state.realtime_event_task = asyncio.create_task(consume_realtime_events())
+
+
+@app.on_event("shutdown")
+async def stop_realtime_event_consumer() -> None:
+    task = app.state.realtime_event_task
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
 
 
 @app.get("/")

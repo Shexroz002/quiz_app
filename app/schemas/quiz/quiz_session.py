@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_serializer, Field
 
 from app.models.quiz.real_time_quiz.quiz_session import SessionType
 from app.schemas.quiz.question import QuestionDetail, QuestionDetailWithoutCorrect, QuestionImageBase, BASE_URL
+from app.utils.datetime import as_tashkent_datetime
 
 
 class QuizSessionCreate(BaseModel):
@@ -57,8 +58,13 @@ class QuizSessionTeacherResponse(BaseModel):
     duration_minutes: int
     questions_count: int
     started_at: datetime | None
+    deadline_at: datetime | None
     finished_at: datetime | None
     session_type: SessionType
+
+    @field_serializer("started_at", "deadline_at", "finished_at", when_used="json")
+    def serialize_session_times(self, value: datetime | None):
+        return as_tashkent_datetime(value) if value is not None else None
 
 class QuizSessionResponse(QuizSessionTeacherResponse):
     model_config = ConfigDict(from_attributes=True)
@@ -71,9 +77,14 @@ class StartSessionResponse(BaseModel):
     id: int
     status: str
     started_at: datetime | None
+    deadline_at: datetime | None
     finished_at: datetime | None
     participants_count: int
     attempts_created: int
+
+    @field_serializer("started_at", "deadline_at", "finished_at", when_used="json")
+    def serialize_session_times(self, value: datetime | None):
+        return as_tashkent_datetime(value) if value is not None else None
 
 
 class StartSessionSinglePlayerBaseResponse(BaseModel):
@@ -87,8 +98,13 @@ class StartSessionSinglePlayerResponse(StartSessionSinglePlayerBaseResponse):
     status: str
     questions_count: int
     started_at: datetime | None
+    deadline_at: datetime | None
     finished_at: datetime | None
     questions: list[QuestionDetailWithoutCorrect]
+
+    @field_serializer("started_at", "deadline_at", "finished_at", when_used="json")
+    def serialize_session_times(self, value: datetime | None):
+        return as_tashkent_datetime(value) if value is not None else None
 
 
 class OptionSchema(BaseModel):

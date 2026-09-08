@@ -32,6 +32,10 @@ class QuizRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, quiz_id: int):
+        result = await self.db.execute(select(Quiz).where(Quiz.id == quiz_id))
+        return result.scalar_one_or_none()
+
     async def update(self, quiz_id: int, user_id, update_data: dict):
         quiz = await self.get(quiz_id, user_id)
 

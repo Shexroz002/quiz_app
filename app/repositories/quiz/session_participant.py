@@ -37,6 +37,11 @@ class SessionParticipantRepository:
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def mark_ready(self, participant: SessionParticipant) -> SessionParticipant:
+        participant.participant_status = ParticipantStatus.READY
+        await self.db.flush()
+        return participant
+
     async def get_participant_list(self, session_id: int,pagination=True):
         stmt = (
             select(

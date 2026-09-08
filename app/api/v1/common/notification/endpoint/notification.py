@@ -25,7 +25,8 @@ async def mark_notification_as_read(
     return await notification_service.mark_as_read(notification_id, current_user.id)
 
 
-@notification_router.patch("/read-all/", response_model=list[NotificationReadResponseSchema])
+
+@notification_router.patch("/read-all/", response_model=int)
 async def mark_all_notifications_as_read(
         current_user=Depends(get_current_user),
         notification_service=Depends(get_notification_service)
