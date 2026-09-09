@@ -8,6 +8,7 @@ from fastapi_pagination import add_pagination
 
 from app.api.v1.common.chat.router import base_chat_router
 from app.api.v1.router import api_router
+from app.bot.handlers.webapp import router as telegram_webapp_router
 from app.websocket import quiz_session_ws_router, notification_ws_router
 from app.websocket.chat.chat_websocket import chat_ws_router
 from app.websocket.pdf_job_ws import job_ws_router
@@ -28,6 +29,7 @@ app.add_middleware(
 )
 add_pagination(app)
 app.include_router(api_router, prefix="/api")
+app.include_router(telegram_webapp_router)
 app.include_router(quiz_session_ws_router)
 app.include_router(notification_ws_router)
 

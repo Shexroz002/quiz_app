@@ -34,7 +34,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/models/chat/chats.py`: `Chat`; relational chat metadata, owner, direct-chat key, cached last-message fields, and `ChatMember` collection.
 - `app/models/chat/chat_members.py`: `ChatMember`; unique chat/user membership, role, join time, and Mongo message read cursor.
 - `app/models/message/message_reaction.py`: `MessageReaction`; relational reaction record keyed by chat/message/user. Mongo message documents also carry reaction data through `MessageRepository`.
-- `app/bot/models.py`: `TelegramQuizRoom`; durable mapping from a managed `QuizSession` to one Telegram chat message plus publish revision and leaderboard delivery time.
+- `app/bot/models.py`: `TelegramQuizRoom` durably maps a managed `QuizSession` to one Telegram chat message and leaderboard delivery state. `TelegramSinglePlayerResultDelivery` is the private-chat outbox keyed uniquely by a finished `QuizAttempt`.
 - `app/models/__init__.py` and package `__init__.py` files expose commonly imported models. `migration/env.py` imports account, quiz, group, and chat model packages for Alembic metadata.
 
 ## Domain Enums
@@ -107,7 +107,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/services/pdf/tasks/quiz_tasks.py:AIQuizTaskService`: owns task-side job loading, progress callbacks, provider/parser construction, shared quiz persistence, completion, and input cleanup.
 - `process_pdf_task`: Mistral OCR -> `AIQuizParser` -> `save_quiz_from_json`; runs on `pdf_ai_queue` using `CeleryAsyncSessionLocal`.
 - `generate_quiz_from_description_task`: Gemini generation -> `AIQuizParser` -> `save_quiz_from_json`; runs on `ai_test_generator`.
-- `app/bot/tasks.py`: defines Celery `telegram.recover_rooms` and retrying `telegram.maintain_room`; recovers durable Telegram rooms, invokes managed multiplayer finalization, and republishes room/leaderboard messages.
+- `app/bot/tasks.py`: defines Celery `telegram.recover_rooms`, retrying `telegram.maintain_room`, and `telegram.deliver_single_player_result`; recovers durable Telegram room and single-player result outboxes, invokes managed multiplayer finalization, and publishes Telegram messages.
 - Flow: `POST /api/v1/quiz-generator/pdf-jobs` or `/quiz/generate` -> `PDFJobService` -> Celery task -> AI provider -> `save_quiz_from_json` -> SQL job completion -> Redis progress -> WebSocket/Telegram watcher.
 
 ## HTTP API And Controllers
@@ -130,7 +130,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/api/v1/teacher/quiz_session/endpoints/group_quiz_live.py` under `/api/v1/teacher/quiz-sessions/live`: group-session create/host finish/running list/results/detail/accuracy/leaderboard/info/participants/start/questions/monitoring.
 - `app/api/v1/teacher/statistics/endpoints/card.py` under `/api/v1/teacher/statistic`: dashboard cards, activity chart, analytics overview, group results, weak topics, and weak students.
 - `app/api/v1/common/chat/endpoints/chat.py` and `message.py`: mounted by `app/main.py` directly at `/chats` and `/messages`, not under `/api/v1`; chat CRUD/list/detail and Mongo message CRUD/history/reactions/read/view/file upload.
-- `app/bot/handlers/webapp.py`: mounted directly by `app/main.py` at `/api/v1/bot`; authenticates Telegram init-data and exposes thin managed-room state/questions/answer/finish endpoints.
+- `app/bot/handlers/webapp.py`: mounted directly by `app/main.py` at `/api/v1/bot`; authenticates Telegram init-data and exposes thin managed-room state/questions/answer/finish endpoints plus the single-player result handoff endpoint.
 
 ## Schemas And DTOs
 
@@ -169,14 +169,15 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 
 - `app/bot/main.py`: aiogram polling composition; includes start, menu, quiz, and quiz-room routers.
 - `app/bot/handlers/start.py`: `/start`, durable room deep-link entry including post-registration continuation, phone contact registration, grade selection, profile-photo import, and main menu.
-- `app/bot/handlers/menu.py`: quiz catalog pagination/cards, PDF generation entry, duration selection, managed-room creation, and menu callbacks.
+- `app/bot/handlers/menu.py`: owner-scoped quiz catalog pagination/cards, user-scoped completed-attempt result history and Telegram pagination, catalog-message cleanup on selection, PDF generation entry, single-player Mini App launch, managed-room creation, and menu callbacks. The shared catalog renderer emits separate `single:*` and `friends:*` pagination/card/duration namespaces; only the friends handlers call the managed-room transport.
 - `app/bot/handlers/quiz_room.py`: thin owner-start and room-refresh callbacks over the managed multiplayer service and durable room publisher.
 - `app/bot/handlers/quiz.py`: PDF download/adaptation to `UploadFile`, `PDFJobService` creation, Redis progress watcher, and generated-quiz open/start callbacks.
-- `app/bot/services/quiz_room.py`: Telegram transport for durable managed rooms. It reuses `MultiplayerQuizService`; owns duration parsing, registered-user checks, room creation/deduplication, Telegram message publishing, room entry, and leaderboard formatting.
+- `app/bot/services/quiz_room.py`: Telegram transport for durable managed rooms. It reuses `MultiplayerQuizService`; owns duration parsing, registered-user checks, room creation/deduplication, full-name participant room-state message edits, room entry, participant-private Mini App start links, and full-name leaderboard formatting. Final leaderboards are sent as separate Telegram messages and guarded by durable delivery state.
+- `app/bot/services/single_player_result.py`: durable private-chat single-player result handoff, formatting, queueing, and delivery. It reads authoritative finished-attempt results through `QuizSessionService` and never accepts result fields from the Mini App.
 - `app/bot/utils/registration.py`: Telegram-ID lookup and phone-linked/new student registration using `UserRepository`, existing enums, hashing, and shared SQL sessions.
 - `app/bot/utils/progress.py`: Redis job-to-message mapping, PDF job snapshots, progress text/message edits, and async watcher lifecycle.
 - `app/bot/utils/profile_photo.py` and `upload.py`: `StorageService`-compatible Telegram file adapters.
-- `app/bot/keyboards/reply.py`: phone contact keyboard. `inline.py`: registration/menu/catalog/duration/WebApp keyboards and URL. `quiz_room.py`: room deep links and join/start/player buttons.
+- `app/bot/keyboards/reply.py`: phone contact and persistent main-menu keyboards. `inline.py`: registration, catalog, duration, and WebApp keyboards and URL. `quiz_room.py`: waiting-room join deep links plus direct Mini App buttons for running rooms.
 - `app/bot/states/__init__.py`: registration, PDF generation, and custom-duration FSM states.
 - `app/bot/webapp`: Vite/React Telegram Mini App. `src/pages/QuizPage.jsx` owns quiz UI/state and switches between existing single-player and managed-room flows; `src/api/quiz.js` authenticates and calls the corresponding APIs; `src/utils/telegram.js` reads and validates Telegram init/query data. `src/components/RichText.jsx`, `Question.jsx`, `QuestionMedia.jsx`, `AnswerOptions.jsx`, `QuizProgress.jsx`, and `QuizTimer.jsx` own Markdown/KaTeX rendering, media, choices, progress, and deadline UI.
 
@@ -188,7 +189,9 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/services/pdf/pdf_service.py` is the implemented PDF/image utility. The similarly named `app/services/pdf_service.py`, `app/utils/pdf_utils.py`, `app/utils/latex_utils.py`, `app/utils/timer.py`, `app/services/session_service.py`, `app/workers/pdf_tasks.py`, `app/workers/celery_app.py`, `app/api/v1/common/chat/endpoints/file_upload.py`, and `app/schemas/quiz/test.py` are empty placeholders. `app/bot/handlers/profile.py` and `app/bot/middlewares/auth.py` contain no behavior.
 - `migration/versions/20260905_0001_timezone_aware_timestamps.py`: timezone-aware timestamp migration.
 - `migration/versions/20260908_0002_quiz_session_deadline.py`: adds `QuizSession.deadline_at`, migrates running-session deadlines, and removes the default finish timestamp from unfinished attempts.
-- `docker-compose-local.yml`: Postgres, Redis, Mongo, FastAPI, Celery, aiogram bot, Vite WebApp, and Cloudflare tunnel. `docker-compose.yml`: production Postgres/Redis/API/Celery topology. `requirements.txt` and `app/bot/webapp/package.json` are dependency manifests.
+- `migration/versions/20260909_0003_telegram_quiz_rooms.py`: creates the durable `telegram_quiz_rooms` table, constraints, foreign key, and timestamp indexes used by managed Telegram multiplayer rooms.
+- `migration/versions/20260909_0004_telegram_single_player_results.py`: creates the attempt-unique durable outbox for private Telegram single-player result delivery.
+- `docker-compose-local.yml`: Postgres, Redis, Mongo, FastAPI, Celery, aiogram bot, Vite WebApp, and Cloudflare tunnel. `docker/dev/run-cloudflared.sh` restarts the local accountless quick tunnel when Cloudflare invalidates its tunnel ID. `docker-compose.yml`: production Postgres/Redis/API/Celery topology. `requirements.txt` and `app/bot/webapp/package.json` are dependency manifests.
 
 ## Reuse Map
 

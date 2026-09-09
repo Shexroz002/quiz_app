@@ -15,6 +15,7 @@ celery_app.conf.task_queues = (
     Queue("pdf_ai_queue"),
     Queue("ai_test_generator"),
     Queue("quiz_session"),
+    Queue("telegram_quiz"),
 
 )
 celery_app.conf.update(
@@ -35,7 +36,12 @@ celery_app.conf.beat_schedule = {
         "task": "quiz.finalize_expired_sessions",
         "schedule": 60.0,
     },
+    "recover-telegram-rooms-every-60-seconds": {
+        "task": "telegram.recover_rooms",
+        "schedule": 60.0,
+    },
 }
 
 # Import task modules whose filenames do not use Celery's default tasks.py name.
 from app.services.quiz.tasks import session_tasks  # noqa: E402, F401
+from app.bot import tasks as telegram_tasks  # noqa: E402, F401

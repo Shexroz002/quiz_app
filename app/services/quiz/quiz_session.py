@@ -750,6 +750,46 @@ class QuizSessionService:
         await self.db.commit()
         return result
 
+    async def get_finished_single_player_result(self, session_id: int, user_id: int):
+        quiz_session = await self.session_repo.player_session(session_id)
+        if not quiz_session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if quiz_session.session_type != SessionType.individual:
+            raise HTTPException(status_code=400, detail="Session is not single-player")
+
+        participant = await self.participant_repo.get_by_session_user(session_id, user_id)
+        if not participant:
+            raise HTTPException(status_code=403, detail="User is not a participant of this session")
+
+        attempt = await self.attempt_repo.get_by_session_participant(session_id, participant.id)
+        if not attempt or not attempt.finished:
+            raise HTTPException(status_code=409, detail="Quiz attempt is not finished")
+
+        result = await self._build_attempt_result(session_id, quiz_session.quiz_id, attempt)
+        quiz = await self.quiz_repo.get_by_id(quiz_session.quiz_id)
+        spend_time = 0
+        if quiz_session.started_at and attempt.finished_at:
+            spend_time = max(
+                0,
+                int(
+                    (
+                        as_tashkent_datetime(attempt.finished_at)
+                        - as_tashkent_datetime(quiz_session.started_at)
+                    ).total_seconds()
+                ),
+            )
+
+        total_questions = result["total_questions"]
+        return {
+            **result,
+            "quiz_title": quiz.title if quiz else "Test",
+            "subject": quiz.subject if quiz else None,
+            "percentage": round(result["correct_answers"] * 100 / total_questions, 2)
+            if total_questions
+            else 0,
+            "spend_time": spend_time,
+        }
+
     async def single_player_error_analysis(self, session_id: int, user_id: int):
         quiz_session = await self.session_repo.get_session_questions_with_answers(session_id, user_id)
         if not quiz_session:

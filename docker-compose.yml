@@ -86,7 +86,7 @@ services:
      celery -A app.core.celery_app worker
       --loglevel=info
       --concurrency=24
-      -Q celery,pdf_ai_queue,ai_test_generator,quiz_session
+      -Q celery,pdf_ai_queue,ai_test_generator,quiz_session,telegram_quiz
     networks:
       - quiz-network
     volumes:

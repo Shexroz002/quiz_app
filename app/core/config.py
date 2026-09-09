@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     MONGO_INITDB_ROOT_PASSWORD:str
     MONGODB_URL:str
     MONGODB_DB_NAME :str
+    TELEGRAM_BOT_TOKEN: str
+    TELEGRAM_WEBAPP_URL: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
