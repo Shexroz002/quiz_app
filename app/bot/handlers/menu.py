@@ -333,6 +333,7 @@ async def show_quiz_catalog(
     *,
     single_player: bool = False,
     friends_mode: bool = False,
+    challenge_owner_id: int | None = None,
 ) -> None:
     if isinstance(event, CallbackQuery):
         if event.message is None:
@@ -395,6 +396,7 @@ async def show_quiz_catalog(
                 current_page,
                 single_player=single_player,
                 friends_mode=friends_mode,
+                challenge_owner_id=challenge_owner_id,
             ),
             parse_mode="HTML",
         )
@@ -407,6 +409,7 @@ async def show_quiz_catalog(
             total_pages,
             single_player=single_player,
             friends_mode=friends_mode,
+            challenge_owner_id=challenge_owner_id,
         ),
     )
     await state.update_data(
@@ -554,6 +557,7 @@ async def show_duration_menu(
     prefix: str,
     single_player: bool = False,
     friends_mode: bool = False,
+    challenge_owner_id: int | None = None,
 ) -> None:
     values = parse_callback_values(callback.data, prefix, 2)
     if values is None or callback.message is None:
@@ -579,6 +583,7 @@ async def show_duration_menu(
             page,
             single_player=single_player,
             friends_mode=friends_mode,
+            challenge_owner_id=challenge_owner_id,
         ),
         parse_mode="HTML",
     )
@@ -667,6 +672,7 @@ async def prepare_custom_duration(
     target_state,
     single_player: bool = False,
     friends_mode: bool = False,
+    challenge_owner_id: int | None = None,
 ) -> None:
     values = parse_callback_values(callback.data, prefix, 2)
     if values is None or callback.message is None:
@@ -677,11 +683,14 @@ async def prepare_custom_duration(
         await callback.answer("Test topilmadi yoki sizga tegishli emas.", show_alert=True)
         return
     await state.set_state(target_state)
-    await state.update_data(
+    duration_data = dict(
         duration_quiz_id=quiz_id,
         duration_page=page,
         duration_message_id=callback.message.message_id,
     )
+    if challenge_owner_id is not None:
+        duration_data["challenge_owner_id"] = challenge_owner_id
+    await state.update_data(**duration_data)
     await callback.message.edit_text(
         "✏️ <b>Vaqtni kiriting</b>\nTest uchun vaqtni daqiqada yuboring. Masalan: <b>25</b>",
         reply_markup=quiz_custom_duration_keyboard(
@@ -689,6 +698,7 @@ async def prepare_custom_duration(
             page,
             single_player=single_player,
             friends_mode=friends_mode,
+            challenge_owner_id=challenge_owner_id,
         ),
         parse_mode="HTML",
     )
@@ -724,6 +734,7 @@ async def return_to_quiz_catalog(
     prefix: str,
     single_player: bool = False,
     friends_mode: bool = False,
+    challenge_owner_id: int | None = None,
 ) -> None:
     values = parse_callback_values(callback.data, prefix, 2)
     if values is None:
@@ -737,6 +748,7 @@ async def return_to_quiz_catalog(
         page=page,
         single_player=single_player,
         friends_mode=friends_mode,
+        challenge_owner_id=challenge_owner_id,
     )
 
 

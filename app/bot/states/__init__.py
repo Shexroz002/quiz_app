@@ -13,3 +13,4 @@ class QuizGenerationState(StatesGroup):
 class QuizDurationState(StatesGroup):
     waiting_for_single_player_custom_minutes = State()
     waiting_for_friends_custom_minutes = State()
+    waiting_for_group_challenge_custom_minutes = State()

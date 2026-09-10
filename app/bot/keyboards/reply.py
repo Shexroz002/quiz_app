@@ -11,14 +11,13 @@ MENU_FRIENDS_TEXT = "👥 Do‘stlar bilan ishlash"
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=MENU_TEST_WORK_TEXT)],
             [
+                KeyboardButton(text=MENU_TEST_WORK_TEXT),
                 KeyboardButton(text=MENU_TEST_CREATE_TEXT),
-                KeyboardButton(text=MENU_TESTS_TEXT),
             ],
             [
+                KeyboardButton(text=MENU_TESTS_TEXT),
                 KeyboardButton(text=MENU_RESULTS_TEXT),
-                KeyboardButton(text=MENU_JOIN_LIVE_SESSION_TEXT),
             ],
             [KeyboardButton(text=MENU_FRIENDS_TEXT)],
         ],

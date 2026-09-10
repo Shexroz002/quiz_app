@@ -167,17 +167,18 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 
 ## Telegram Bot And Mini App
 
-- `app/bot/main.py`: aiogram polling composition; includes start, menu, quiz, and quiz-room routers.
+- `app/bot/main.py`: aiogram polling composition; scopes start, menu, and quiz routers to private chats, the challenge router to groups/supergroups, and mounts shared room callbacks for both contexts.
+- `app/bot/handlers/challenge.py`: group-only `/challenge` room-creation flow; reuses the owner-scoped catalog and duration helpers, protects temporary callbacks by initiator Telegram ID, delegates persistence/publishing to `create_room`, and directs unregistered users to the private `/start` flow.
 - `app/bot/handlers/start.py`: `/start`, durable room deep-link entry including post-registration continuation, phone contact registration, grade selection, profile-photo import, and main menu.
 - `app/bot/handlers/menu.py`: owner-scoped quiz catalog pagination/cards, user-scoped completed-attempt result history and Telegram pagination, catalog-message cleanup on selection, PDF generation entry, single-player Mini App launch, managed-room creation, and menu callbacks. The shared catalog renderer emits separate `single:*` and `friends:*` pagination/card/duration namespaces; only the friends handlers call the managed-room transport.
 - `app/bot/handlers/quiz_room.py`: thin owner-start and room-refresh callbacks over the managed multiplayer service and durable room publisher.
 - `app/bot/handlers/quiz.py`: PDF download/adaptation to `UploadFile`, `PDFJobService` creation, Redis progress watcher, and generated-quiz open/start callbacks.
-- `app/bot/services/quiz_room.py`: Telegram transport for durable managed rooms. It reuses `MultiplayerQuizService`; owns duration parsing, registered-user checks, room creation/deduplication, full-name participant room-state message edits, room entry, participant-private Mini App start links, and full-name leaderboard formatting. Final leaderboards are sent as separate Telegram messages and guarded by durable delivery state.
+- `app/bot/services/quiz_room.py`: Telegram transport for durable managed rooms. It reuses `MultiplayerQuizService`; owns duration parsing, registered-user checks, room creation/deduplication, compact lifecycle rendering on one persisted group message, room entry, participant-private Mini App start links, and full-name leaderboard formatting. Published revisions suppress redundant edits and durable leaderboard delivery state guards completion.
 - `app/bot/services/single_player_result.py`: durable private-chat single-player result handoff, formatting, queueing, and delivery. It reads authoritative finished-attempt results through `QuizSessionService` and never accepts result fields from the Mini App.
 - `app/bot/utils/registration.py`: Telegram-ID lookup and phone-linked/new student registration using `UserRepository`, existing enums, hashing, and shared SQL sessions.
 - `app/bot/utils/progress.py`: Redis job-to-message mapping, PDF job snapshots, progress text/message edits, and async watcher lifecycle.
 - `app/bot/utils/profile_photo.py` and `upload.py`: `StorageService`-compatible Telegram file adapters.
-- `app/bot/keyboards/reply.py`: phone contact and persistent main-menu keyboards. `inline.py`: registration, catalog, duration, and WebApp keyboards and URL. `quiz_room.py`: waiting-room join deep links plus direct Mini App buttons for running rooms.
+- `app/bot/keyboards/reply.py`: phone contact and persistent main-menu keyboards. `inline.py`: registration, catalog, duration, and WebApp keyboards and URL. `quiz_room.py`: group waiting/start deep links plus private Mini App buttons for running rooms.
 - `app/bot/states/__init__.py`: registration, PDF generation, and custom-duration FSM states.
 - `app/bot/webapp`: Vite/React Telegram Mini App. `src/pages/QuizPage.jsx` owns quiz UI/state and switches between existing single-player and managed-room flows; `src/api/quiz.js` authenticates and calls the corresponding APIs; `src/utils/telegram.js` reads and validates Telegram init/query data. `src/components/RichText.jsx`, `Question.jsx`, `QuestionMedia.jsx`, `AnswerOptions.jsx`, `QuizProgress.jsx`, and `QuizTimer.jsx` own Markdown/KaTeX rendering, media, choices, progress, and deadline UI.
 

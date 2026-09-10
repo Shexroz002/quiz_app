@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from fastapi import HTTPException
 
+from app.bot.handlers.challenge import start_private_challenge
 from app.bot.handlers.menu import show_main_menu
 from app.bot.keyboards.inline import grade_keyboard
 from app.bot.keyboards.reply import contact_keyboard
@@ -40,6 +41,12 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
                 await enter_room(message, room_code)
             except HTTPException as exc:
                 await message.answer(str(exc.detail))
+        elif command.args and await start_private_challenge(
+            message,
+            state,
+            command.args,
+        ):
+            return
         else:
             await show_main_menu(message)
         return

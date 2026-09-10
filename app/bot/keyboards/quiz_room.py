@@ -23,19 +23,35 @@ def room_webapp_url(session):
     return urlunsplit(url._replace(query=urlencode(query)))
 
 
-def room_keyboard(session, username, *, is_host):
+def room_keyboard(session, username, *, is_host, group_chat=False):
     if session.status == "finished":
         return None
     if session.status == "waiting":
         rows = []
-        if is_host:
+        if group_chat:
             rows.append([
-                InlineKeyboardButton(text="🚀 Boshlash", callback_data=f"room:start:{session.id}"),
+                InlineKeyboardButton(
+                    text="➕ Testga qo‘shilish",
+                    url=room_link(username, session.join_code),
+                ),
             ])
-        rows.append([InlineKeyboardButton(
-            text="👥 Do‘stlarga ulashish",
-            url=room_share_link(username, session.join_code),
-        )])
+        elif is_host:
+            rows.append([
+                InlineKeyboardButton(
+                    text="🚀 Boshlash",
+                    callback_data=f"room:start:{session.id}",
+                ),
+            ])
+        if not group_chat:
+            rows.append([InlineKeyboardButton(
+                text="👥 Do‘stlarga ulashish",
+                url=room_share_link(username, session.join_code),
+            )])
+    elif group_chat:
+        rows = [[InlineKeyboardButton(
+            text="📝 Testni ishlash",
+            url=room_link(username, session.join_code),
+        )]]
     else:
         rows = [[InlineKeyboardButton(
             text="🚀 Testni boshlash",
@@ -47,7 +63,16 @@ def room_keyboard(session, username, *, is_host):
 def player_keyboard(session):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
-            text="🚀 Testni boshlash",
+            text="📝 Testni boshlash",
             web_app=WebAppInfo(url=room_webapp_url(session)),
+        )
+    ]])
+
+
+def host_room_keyboard(session):
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="🚀 Testni boshlash",
+            callback_data=f"room:start:{session.id}",
         )
     ]])

@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from app.bot.keyboards.quiz_room import (
+    host_room_keyboard,
     player_keyboard,
     room_keyboard,
     room_link,
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 MAX_ROOM_PARTICIPANTS = 20
 MAX_DURATION_MINUTES = 10080
 ROOM_MESSAGE_REVISION_VERSION = "4"
+GROUP_ROOM_MESSAGE_REVISION_VERSION = "1"
+ROOM_PARTICIPANT_PREVIEW_LIMIT = 8
+GROUP_LEADERBOARD_PREVIEW_LIMIT = MAX_ROOM_PARTICIPANTS
+GROUP_ROOM_MESSAGE_MAX_LENGTH = 4000
 
 
 def parse_duration(value):
@@ -55,6 +60,7 @@ async def create_room(bot, telegram_id, chat_id, message_id, quiz_id, duration):
     minutes = parse_duration(duration)
     user = await registered_user(telegram_id)
     username = (await bot.get_me()).username
+    host_control = None
     async with AsyncSessionLocal() as db:
         # Deduplicate even callbacks from different users on the same shared message.
         await db.execute(select(func.pg_advisory_xact_lock(
@@ -82,6 +88,22 @@ async def create_room(bot, telegram_id, chat_id, message_id, quiz_id, duration):
                 session_id=session_id, chat_id=chat_id, message_id=message_id,
                 bot_username=username,
             ))
+            if chat_id < 0:
+                quiz = await db.get(Quiz, session.quiz_id)
+                participants = await service.participant_repo.get_participant_list(
+                    session_id,
+                    pagination=False,
+                )
+                question_count = await service.quiz_repo.quiz_question_count(quiz.id)
+                host_control = (
+                    format_host_waiting_room(
+                        quiz,
+                        session,
+                        len(participants),
+                        question_count,
+                    ),
+                    host_room_keyboard(session),
+                )
         await db.commit()
     # The DB record also acts as an outbox; Celery Beat recovers failed edits.
     try:
@@ -89,6 +111,20 @@ async def create_room(bot, telegram_id, chat_id, message_id, quiz_id, duration):
     except Exception:
         logger.exception("Could not publish Telegram room %s", session_id)
         queue_room_maintenance(session_id)
+    if host_control is not None:
+        try:
+            text, keyboard = host_control
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+        except Exception:
+            logger.exception(
+                "Could not send Telegram room %s host control",
+                session_id,
+            )
     return session_id
 
 
@@ -125,6 +161,58 @@ def format_leaderboard(quiz, session, rows):
         "💪 Har bir test — yangi tajriba.",
         "Keyingi safar yanada yaxshi natija ko‘rsatishga harakat qiling!",
     ])
+    return "\n".join(lines)
+
+
+def format_group_leaderboard(quiz, session, rows):
+    total_questions = rows[0]["total_questions"] if rows else 0
+    lines = [
+        "🏆 <b>Test yakunlandi!</b>",
+        "",
+        f"📚 {escape((quiz.subject or 'Test')[:80])}",
+        f"📝 {escape(quiz.title[:180])}",
+        "",
+        f"⏱ {session.duration_minutes} daqiqa",
+        f"👥 {len(rows)} ishtirokchi",
+        f"❓ {total_questions} savol",
+        "",
+        "━━━━━━━━━━━━━━",
+        "",
+        "🏅 <b>LEADERBOARD</b>",
+    ]
+    footer = [
+        "",
+        "━━━━━━━━━━━━━━",
+        "",
+        "🔥 Zo‘r bellashuv!",
+        "Keyingi testda kim 1-o‘rinni oladi?",
+    ]
+    visible_rows = rows[:GROUP_LEADERBOARD_PREVIEW_LIMIT]
+    for position, row in enumerate(visible_rows, 1):
+        rank = {1: "🥇", 2: "🥈", 3: "🥉"}.get(position, f"{position}.")
+        total = row["total_questions"]
+        correct = row["correct_answers"]
+        percent = round(100 * correct / total) if total else 0
+        minutes, seconds = divmod(row["spend_time"], 60)
+        result_lines = [
+            "",
+            f"{rank} <b>{escape(row['display_name'][:60])}</b>",
+            f"✅ {correct}/{total}  •  🎯 {percent}%  •  "
+            f"⏱ {minutes:02}:{seconds:02}",
+        ]
+        remaining = len(rows) - position
+        overflow_lines = ["", f"… yana {remaining} ishtirokchi"] if remaining else []
+        projected_text = "\n".join([*lines, *result_lines, *overflow_lines, *footer])
+        if len(projected_text) > GROUP_ROOM_MESSAGE_MAX_LENGTH:
+            remaining = len(rows) - position + 1
+            lines.extend(["", f"… yana {remaining} ishtirokchi"])
+            break
+        lines.extend(result_lines)
+    else:
+        remaining = len(rows) - len(visible_rows)
+        if remaining:
+            lines.extend(["", f"… yana {remaining} ishtirokchi"])
+    lines.extend(footer)
     return "\n".join(lines)
 
 
@@ -167,6 +255,72 @@ def format_room_start_message(quiz, session):
     )
 
 
+def format_host_waiting_room(quiz, session, participant_count, question_count):
+    return (
+        "🎯 <b>Test xonasi tayyor!</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"📝 {escape(quiz.title[:180])}\n"
+        f"❓ {question_count} savol\n"
+        f"⏱ {session.duration_minutes} daqiqa\n\n"
+        f"👥 {participant_count}/{session.max_participants} ishtirokchi\n\n"
+        "Do‘stlaringiz qo‘shilgach testni boshlang."
+    )
+
+
+def format_private_running_room(quiz, session):
+    return (
+        "🚀 <b>Test boshlandi!</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"⏱ {session.duration_minutes} daqiqa\n\n"
+        "Omad! Testni boshlash uchun quyidagi tugmani bosing. 👇"
+    )
+
+
+def format_waiting_group_room(quiz, session, participants, question_count):
+    participant_lines = []
+    for index, participant in enumerate(
+        participants[:ROOM_PARTICIPANT_PREVIEW_LIMIT],
+        1,
+    ):
+        display_name = MultiplayerQuizService.participant_display_name(
+            participant["first_name"],
+            participant["last_name"],
+            participant["nickname"],
+        )
+        participant_lines.append(f"{index}. {escape(display_name[:80])}")
+    remaining = len(participants) - len(participant_lines)
+    if remaining:
+        participant_lines.append(f"… yana {remaining} ishtirokchi")
+    participant_preview = "\n".join(participant_lines)
+    if participant_preview:
+        participant_preview = f"\n{participant_preview}"
+
+    return (
+        "🎯 <b>Test xonasi</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"📝 {escape(quiz.title[:180])}\n"
+        f"❓ {question_count} savol\n"
+        f"⏱ {session.duration_minutes} daqiqa\n\n"
+        f"👥 {len(participants)}/{session.max_participants} ishtirokchi"
+        f"{participant_preview}\n"
+        "🟡 Boshlanishi kutilmoqda\n\n"
+        "Xona egasi testni boshlashini kuting."
+    )
+
+
+def format_running_group_room(quiz, session, participant_count, question_count):
+    return (
+        "🚀 <b>Test boshlandi!</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"📝 {escape(quiz.title[:180])}\n"
+        f"❓ {question_count} savol\n"
+        f"⏱ {session.duration_minutes} daqiqa\n"
+        f"👥 {participant_count} ishtirokchi\n\n"
+        "Savollar tayyor.\n"
+        "Testni ishlashni boshlashingiz mumkin. 👇"
+    )
+
+
 async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
     async with session_factory() as db:
         service = MultiplayerQuizService(db)
@@ -176,59 +330,105 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
         ).with_for_update())).scalar_one()
         if room.leaderboard_delivered_at:
             return
+
+        is_group_chat = room.chat_id < 0
         quiz = await db.get(Quiz, session.quiz_id)
         if session.status == "finished":
             rows = await service.leaderboard(session)
-            text = format_leaderboard(quiz, session, rows)
-            await bot.send_message(
-                chat_id=room.chat_id,
-                text=text,
-                parse_mode="HTML",
-                disable_web_page_preview=True,
+            if is_group_chat:
+                text = format_group_leaderboard(quiz, session, rows)
+                keyboard = None
+            else:
+                text = format_leaderboard(quiz, session, rows)
+                await bot.send_message(
+                    chat_id=room.chat_id,
+                    text=text,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+                room.leaderboard_delivered_at = await service.now()
+                await db.commit()
+                return
+        else:
+            participants = await service.participant_repo.get_participant_list(
+                session_id,
+                pagination=False,
             )
-            room.leaderboard_delivered_at = await service.now()
-            await db.commit()
-            return
-
-        participants = await service.participant_repo.get_participant_list(
-            session_id,
-            pagination=False,
-        )
-        participant_names = []
-        for index, participant in enumerate(participants, 1):
-            display_name = service.participant_display_name(
-                participant["first_name"],
-                participant["last_name"],
-                participant["nickname"],
+            if is_group_chat and session.status == "waiting":
+                question_count = await service.quiz_repo.quiz_question_count(quiz.id)
+                text = format_waiting_group_room(
+                    quiz,
+                    session,
+                    participants,
+                    question_count,
+                )
+            elif is_group_chat:
+                question_count = await service.quiz_repo.quiz_question_count(quiz.id)
+                text = format_running_group_room(
+                    quiz,
+                    session,
+                    len(participants),
+                    question_count,
+                )
+            else:
+                participant_names = []
+                for index, participant in enumerate(participants, 1):
+                    display_name = service.participant_display_name(
+                        participant["first_name"],
+                        participant["last_name"],
+                        participant["nickname"],
+                    )
+                    participant_names.append(
+                        f"{index}. {escape(display_name[:80])}"
+                    )
+                names = "\n".join(participant_names)
+                status = (
+                    "Boshlanishini kutmoqda"
+                    if session.status == "waiting"
+                    else "Test boshlandi"
+                )
+                text = (
+                    f"📚 <b>{escape(quiz.title[:180])}</b>\n"
+                    f"{escape((quiz.subject or 'Umumiy')[:80])}\n"
+                    f"📝 {await service.quiz_repo.quiz_question_count(quiz.id)} ta savol\n"
+                    f"⏱ {session.duration_minutes} daqiqa · "
+                    f"👥 {len(participants)}/{session.max_participants}\n\n"
+                    f"{names}\n\n<b>{status}</b>\n"
+                    f"Taklif: {room_link(room.bot_username, session.join_code)}"
+                )
+            keyboard = room_keyboard(
+                session,
+                room.bot_username,
+                is_host=True,
+                group_chat=is_group_chat,
             )
-            participant_names.append(f"{index}. {escape(display_name[:80])}")
-        names = "\n".join(participant_names)
-        status = "Boshlanishini kutmoqda" if session.status == "waiting" else "Test boshlandi"
-        text = (
-            f"📚 <b>{escape(quiz.title[:180])}</b>\n"
-            f"{escape((quiz.subject or 'Umumiy')[:80])}\n"
-            f"📝 {await service.quiz_repo.quiz_question_count(quiz.id)} ta savol\n"
-            f"⏱ {session.duration_minutes} daqiqa · 👥 {len(participants)}/{session.max_participants}\n\n"
-            f"{names}\n\n<b>{status}</b>\n"
-            f"Taklif: {room_link(room.bot_username, session.join_code)}"
-        )
-        webapp_url = room_webapp_url(session) if session.status == "running" else ""
-        revision_payload = (
-            f"{ROOM_MESSAGE_REVISION_VERSION}:{session.status}:{webapp_url}:{text}"
-        )
+        if is_group_chat:
+            revision_payload = (
+                f"{GROUP_ROOM_MESSAGE_REVISION_VERSION}:{session.status}:{text}"
+            )
+        else:
+            webapp_url = (
+                room_webapp_url(session) if session.status == "running" else ""
+            )
+            revision_payload = (
+                f"{ROOM_MESSAGE_REVISION_VERSION}:{session.status}:"
+                f"{webapp_url}:{text}"
+            )
         revision = hashlib.sha256(revision_payload.encode()).hexdigest()
         if room.published_revision != revision:
             try:
                 await bot.edit_message_text(
                     text, chat_id=room.chat_id, message_id=room.message_id,
                     parse_mode="HTML",
-                    reply_markup=room_keyboard(session, room.bot_username, is_host=True),
+                    reply_markup=keyboard,
                     disable_web_page_preview=True,
                 )
             except TelegramBadRequest as exc:
                 if "message is not modified" not in str(exc).lower():
                     raise
             room.published_revision = revision
+        if session.status == "finished" and room.leaderboard_delivered_at is None:
+            room.leaderboard_delivered_at = await service.now()
         await db.commit()
 
 
@@ -300,6 +500,7 @@ async def enter_room(message, code):
         else:
             await service.participant(session_id, user.id)
             await service.finalize_quiz_session(session_id)
+            quiz = await db.get(Quiz, session.quiz_id)
             join_confirmation = None
         status = session.status
         try:
@@ -308,7 +509,11 @@ async def enter_room(message, code):
             raise HTTPException(503, "Telegram Mini App HTTPS manzili sozlanmagan.") from exc
         username = room.bot_username
     if status == "running":
-        await message.answer("Testga tayyorsiz. Vaqt barcha uchun bir xil.", reply_markup=keyboard)
+        await message.answer(
+            format_private_running_room(quiz, session),
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
     elif status == "finished":
         await message.answer("Test yakunlangan. Natijalar xona xabarida.")
     else:
