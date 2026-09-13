@@ -137,8 +137,8 @@ def format_progress_text(data: dict) -> str:
             f"📝 {quiz_title}\n\n"
             f"❓ {question_count} ta savol yaratildi\n"
             "✅ Test muvaffaqiyatli saqlandi\n\n"
-            "Endi testni o‘zingiz ishlashingiz yoki do‘stlaringiz bilan "
-            "boshlashingiz mumkin. 🚀"
+            "Avval savollarni tekshirib chiqing, so‘ng testni o‘zingiz "
+            "ishlashingiz yoki do‘stlaringiz bilan boshlashingiz mumkin. 🚀"
         )
     if status == "FAILED":
         return format_failed_text(_safe_user_error(data))

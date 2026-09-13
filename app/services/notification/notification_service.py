@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database.base import get_db
 from app.core.database.redis import get_redis_client
-from app.models import User, NotificationType
+from app.models import User, NotificationActionType, NotificationType
 from app.repositories.notification.notification_repo import NotificationRepo
 from app.schemas.notification.notification import NotificationCreateSchema, NotificationResponseSchema
 from app.services.redis_service.realtime_events import publish_realtime_event
@@ -95,8 +95,8 @@ class NotificationService:
            data = {
                "recipient_id": user_id,
                "sender_id": current_user.id,
-               "type": "test_invite",
-               "action_type": "test_invite",
+               "type": NotificationType.TEST_INVITE,
+               "action_type": NotificationActionType.TEST_INVITE,
                "payload": {"session_code": session_code},
                "title": "Quiz Session  taklif",
                "message": f"{current_user.first_name} {current_user.last_name} sizni birgalikda test ishlashga taklif qilmoqda."

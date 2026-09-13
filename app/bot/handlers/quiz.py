@@ -5,7 +5,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from fastapi import HTTPException
 
-from app.bot.keyboards.inline import QUIZ_OPEN, QUIZ_START, quiz_webapp_keyboard
+from app.bot.keyboards.inline import (
+    QUIZ_OPEN,
+    QUIZ_REVIEW,
+    QUIZ_START,
+    quiz_review_webapp_keyboard,
+    quiz_webapp_keyboard,
+)
 from app.bot.states import QuizGenerationState
 from app.bot.utils.progress import (
     edit_progress_message,
@@ -127,6 +133,31 @@ async def open_generated_quiz(callback: CallbackQuery):
 
     await callback.answer()
     await callback.message.answer("Testni ochish uchun tugmani bosing.", reply_markup=reply_markup)
+
+
+@router.callback_query(F.data.startswith(f"{QUIZ_REVIEW}:"))
+async def review_generated_quiz(callback: CallbackQuery):
+    quiz_id = callback.data.rsplit(":", 1)[-1] if callback.data else ""
+    if not quiz_id.isdigit() or callback.message is None:
+        await callback.answer("Test havolasi yaroqsiz.", show_alert=True)
+        return
+
+    quiz_id = int(quiz_id)
+    if not await user_owns_quiz(callback.from_user.id, quiz_id):
+        await callback.answer("Test topilmadi yoki sizga tegishli emas.", show_alert=True)
+        return
+
+    try:
+        reply_markup = quiz_review_webapp_keyboard(quiz_id)
+    except ValueError:
+        await callback.answer("HTTPS tunnel hali tayyor emas. Birozdan so'ng qayta urining.", show_alert=True)
+        return
+
+    await callback.answer()
+    await callback.message.answer(
+        "Savollarni tekshirish uchun tugmani bosing.",
+        reply_markup=reply_markup,
+    )
 
 
 @router.callback_query(F.data.startswith(f"{QUIZ_START}:"))

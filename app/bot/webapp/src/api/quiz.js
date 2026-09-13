@@ -34,6 +34,9 @@ export const finishQuiz = (id, answers) =>
   request(`/student/sessions/${id}/finish-single-player/`, { method: 'POST', body: answers });
 export const handoffSinglePlayerResult = (id) =>
   request(`/bot/single-player/${id}/result/`, { method: 'POST' });
+export const getQuizReview = (quizId) => request(`/bot/quizzes/${quizId}/review/`);
+export const setCorrectOption = (questionId, optionId) =>
+  request(`/question/update-correct-option/${questionId}/${optionId}`, { method: 'PUT' });
 export const getRoomState = (id) => request(`/bot/rooms/${id}/state/`);
 export const getRoomQuestions = (id) => request(`/bot/rooms/${id}/questions/`);
 export const submitRoomAnswer = (id, answer) =>

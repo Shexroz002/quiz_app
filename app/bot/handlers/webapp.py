@@ -12,9 +12,12 @@ from app.core.database.base import get_db
 from app.core.security.jwt import create_access_token
 from app.models import User
 from app.models.account.user import UserType
+from app.schemas.quiz.question import QuestionDetail
 from app.schemas.quiz.quiz_attempt import FinishQuizResponse, SubmitAnswerRequest, SubmitAnswerResponse
 from app.schemas.quiz.quiz_session import StartSessionSinglePlayerResponse
 from app.services.quiz.multiplayer import MultiplayerQuizService
+from app.services.quiz.question_service import QuestionService
+from app.services.quiz.quiz_service import QuizService
 
 router = APIRouter(prefix="/api/v1/bot", tags=["Telegram Mini App"])
 
@@ -26,6 +29,13 @@ class TelegramAuthRequest(BaseModel):
 class SinglePlayerResultHandoffResponse(BaseModel):
     accepted: bool
     already_delivered: bool
+
+
+class QuizReviewResponse(BaseModel):
+    quiz_id: int
+    title: str
+    subject: str | None = None
+    questions: list[QuestionDetail]
 
 
 @router.post("/auth/")
@@ -54,6 +64,22 @@ async def handoff_single_player_result(
     return {
         "accepted": True,
         "already_delivered": delivery.delivered_at is not None,
+    }
+
+
+@router.get("/quizzes/{quiz_id}/review/", response_model=QuizReviewResponse)
+async def quiz_review(
+    quiz_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    quiz = await QuizService(db).detail(current_user.id, quiz_id)
+    questions = await QuestionService(db).list_by_quiz(quiz_id, current_user.id)
+    return {
+        "quiz_id": quiz.id,
+        "title": quiz.title,
+        "subject": quiz.subject,
+        "questions": questions,
     }
 
 

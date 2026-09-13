@@ -17,6 +17,10 @@ export function getQuizId() {
   return Number(value);
 }
 
+export function getMode() {
+  return new URLSearchParams(window.location.search).get('mode') === 'review' ? 'review' : 'quiz';
+}
+
 export function getQuizDuration() {
   const value = new URLSearchParams(window.location.search).get('duration_minutes');
   if (!value) return 10;

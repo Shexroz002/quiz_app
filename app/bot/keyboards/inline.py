@@ -13,6 +13,7 @@ MENU_RESULTS = "menu:results"
 MENU_JOIN_LIVE_SESSION = "menu:join_live_session"
 MENU_FRIENDS = "menu:friends"
 QUIZ_OPEN = "quiz:open"
+QUIZ_REVIEW = "quiz:review"
 QUIZ_START = "quiz:start"
 QUIZ_LIST_PAGE = "quizzes:page:"
 QUIZ_DURATION_MENU = "quiz:duration:"
@@ -32,6 +33,7 @@ FRIENDS_QUIZ_CARD = "friends:quiz:card:"
 RESULTS_LIST_PAGE = "results:page:"
 RESULTS_CURRENT = "results:current"
 CHALLENGE_CALLBACK_PREFIX = "challenge:"
+WEBAPP_REVIEW_MODE = "review"
 
 _TUNNEL_LOG = Path("/tunnel/cloudflared.log")
 _QUICK_TUNNEL_PATTERN = re.compile(r"https://[-a-z0-9]+\.trycloudflare\.com")
@@ -50,21 +52,31 @@ def grade_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def generated_quiz_keyboard(quiz_id: int) -> InlineKeyboardMarkup:
+def _webapp_or_callback_button(
+    text: str, quiz_id: int, callback_prefix: str, *, mode: str | None = None
+) -> InlineKeyboardButton:
+    """WebApp button when an HTTPS Web App URL exists, otherwise a callback fallback."""
     try:
-        single_player_button = InlineKeyboardButton(
-            text="📝 Testni ishlash",
-            web_app=WebAppInfo(url=quiz_webapp_url(quiz_id)),
+        return InlineKeyboardButton(
+            text=text,
+            web_app=WebAppInfo(url=quiz_webapp_url(quiz_id, mode=mode)),
         )
     except ValueError:
-        single_player_button = InlineKeyboardButton(
-            text="📝 Testni ishlash",
-            callback_data=f"{QUIZ_OPEN}:{quiz_id}",
-        )
+        return InlineKeyboardButton(text=text, callback_data=f"{callback_prefix}:{quiz_id}")
 
+
+def generated_quiz_keyboard(quiz_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [single_player_button],
+            [
+                _webapp_or_callback_button(
+                    "🔍 Savollarni tekshirish",
+                    quiz_id,
+                    QUIZ_REVIEW,
+                    mode=WEBAPP_REVIEW_MODE,
+                )
+            ],
+            [_webapp_or_callback_button("📝 Testni ishlash", quiz_id, QUIZ_OPEN)],
             [
                 InlineKeyboardButton(
                     text="👥 Do‘stlar bilan ishlash",
@@ -83,7 +95,25 @@ def quiz_webapp_keyboard(quiz_id: int, duration_minutes: int | None = None) -> I
     )
 
 
-def quiz_webapp_url(quiz_id: int, duration_minutes: int | None = None) -> str:
+def quiz_review_webapp_keyboard(quiz_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔍 Savollarni tekshirish",
+                    web_app=WebAppInfo(url=quiz_webapp_url(quiz_id, mode=WEBAPP_REVIEW_MODE)),
+                )
+            ],
+        ]
+    )
+
+
+def quiz_webapp_url(
+    quiz_id: int,
+    duration_minutes: int | None = None,
+    *,
+    mode: str | None = None,
+) -> str:
     webapp_base_url = settings.TELEGRAM_WEBAPP_URL
     if urlsplit(webapp_base_url or "").scheme != "https":
         try:
@@ -100,6 +130,8 @@ def quiz_webapp_url(quiz_id: int, duration_minutes: int | None = None) -> str:
     query["quiz_id"] = str(quiz_id)
     if duration_minutes is not None:
         query["duration_minutes"] = str(duration_minutes)
+    if mode is not None:
+        query["mode"] = mode
     return urlunsplit(url._replace(query=urlencode(query)))
 
 

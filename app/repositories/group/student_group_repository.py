@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi_pagination import paginate
+from fastapi_pagination.ext.sqlalchemy import apaginate
 from sqlalchemy import select, delete, and_, cast, String, func, Numeric, case, or_, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -94,8 +94,7 @@ class StudentGroupRepository:
 
         stmt = stmt.order_by(User.first_name.asc(), User.last_name.asc())
 
-        result = await self.db.execute(stmt)
-        return paginate(result.mappings().all())
+        return await apaginate(self.db, stmt)
 
     async def is_group_member(self, group_id: int, student_id: int) -> bool:
         stmt = select(StudentGroupMember).where(
@@ -114,8 +113,7 @@ class StudentGroupRepository:
             .where(StudentGroup.teacher_id == teacher_id)
             .order_by(StudentGroup.name.asc())
         )
-        result = await self.db.execute(stmt)
-        return paginate(result.mappings().all())
+        return await apaginate(self.db, stmt)
 
     async def list_groups(self, teacher_id: int | None = None, search: str | None = None,
                           subject_id: int | None = None, member_id: int | None = None):
@@ -236,9 +234,7 @@ class StudentGroupRepository:
             .order_by(last_activity_expr.desc().nulls_last())
         )
 
-        result = await self.db.execute(stmt)
-        rows = result.mappings().all()
-        return paginate(rows)
+        return await apaginate(self.db, stmt)
 
     async def student_list_by_group_ids(self, group_ids: List[int]) -> List[int]:
         stmt = (
@@ -501,8 +497,7 @@ class StudentGroupRepository:
             User.last_name.asc(),
         )
 
-        result = await self.db.execute(stmt)
-        return paginate(result.mappings().all())
+        return await apaginate(self.db, stmt)
 
     async def get_group_test_results(self, group_id: int, teacher_id: int):
         total_students_subq = (
@@ -600,5 +595,4 @@ class StudentGroupRepository:
             .order_by(QuizSession.created_at.desc())
         )
 
-        result = await self.db.execute(stmt)
-        return paginate(result.mappings().all())
+        return await apaginate(self.db, stmt)

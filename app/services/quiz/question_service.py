@@ -18,6 +18,9 @@ class QuestionService:
     async def detail(self, question_id: int, user_id: int) -> Question:
         return await self.repo.detail(question_id, user_id)
 
+    async def list_by_quiz(self, quiz_id: int, user_id: int) -> list[Question]:
+        return await self.repo.list_with_details(quiz_id, user_id)
+
     async def upload_image_to_question(self, question_id: int, user_id: int, image: UploadFile) -> Question:
         base_dir = Path("media/image") / str(question_id)
         base_dir.mkdir(parents=True, exist_ok=True)
