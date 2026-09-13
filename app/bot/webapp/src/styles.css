@@ -131,6 +131,7 @@ button.icon-button:hover { background: var(--purple-soft); }
 .rich-text p { margin: 7px 0; }
 .katex-display { max-width: 100%; margin: 12px 0; overflow-x: auto; overflow-y: hidden; }
 .katex-display > .katex { padding: 2px 0; }
+.review-hint { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .answers { min-width: 0; padding: 0; margin: 0; border: 0; }
 
 .answer { min-height: 62px; display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 16px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease; }
