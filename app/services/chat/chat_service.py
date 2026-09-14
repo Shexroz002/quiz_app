@@ -9,6 +9,7 @@ from app.models.chat.chat_members import ChatMemberRole
 from app.models.chat.chats import ChatType
 from app.repositories.chat.chat_repo import ChatRepository
 from app.repositories.chat.message_repo import MessageRepository
+from app.repositories.chat.presence_repository import PresenceRepository
 from app.schemas.chat.chat_list import LastMessageOut, ChatListItemOut, ChatListOut
 from app.schemas.chat.chat_schema import CreateGroupChatSchema, CreatePrivateChatSchema
 
@@ -23,6 +24,7 @@ class ChatService:
         self.db = db
         self.repo = ChatRepository(db)
         self.message_repo = MessageRepository(mongo)
+        self.presence_repo = PresenceRepository(redis)
         self.redis = redis
 
     async def create_group_chat(
@@ -87,6 +89,19 @@ class ChatService:
         await self.db.refresh(chat)
         return chat
 
+    async def get_my_chats(self, current_user_id: int, limit: int = 30, offset: int = 0):
+        """Foydalanuvchi a'zo bo'lgan chatlarning oddiy metadata ro'yxati.
+
+        Boyitilgan ro'yxat (presence, o'qilmaganlar soni, oxirgi xabar) uchun
+        `get_chat_list` ishlatiladi.
+        """
+        rows = await self.repo.get_user_chats(
+            user_id=current_user_id,
+            limit=limit,
+            offset=offset,
+        )
+        return [row[0] for row in rows]
+
     async def leave_group(self, chat_id: int, user_id: int):
         chat = await self.repo.get_by_id(chat_id)
         if not chat:
@@ -124,6 +139,11 @@ class ChatService:
             current_user_id=current_user_id,
         )
 
+        # Presence bitta MGET bilan olinadi, har bir chat uchun alohida emas.
+        other_user_ids = [user.id for user in private_users.values()]
+        online_map = await self.presence_repo.is_online_bulk(other_user_ids)
+        last_seen_map = await self.presence_repo.get_last_seen_bulk(other_user_ids)
+
         items = []
 
         for chat in chats:
@@ -138,7 +158,9 @@ class ChatService:
                 if other_user:
                     title = f"{other_user.first_name} {other_user.last_name}"
                     avatar = other_user.profile_image
-                    is_online = bool(await self.redis.exists(f"online:{other_user.id}"))
+                    is_online = online_map.get(other_user.id, False)
+                    # last_seen faqat offline bo'lganda ma'noga ega.
+                    last_seen = None if is_online else last_seen_map.get(other_user.id)
 
             last_message_out = None
 
@@ -167,7 +189,13 @@ class ChatService:
         return ChatListOut(items=items)
 
     async def chat_detail(self, chat_id: int, current_user_id: int):
-        return await self.repo.get_chat_detail_with_members(chat_id, current_user_id, self.redis)
+        detail = await self.repo.get_chat_detail_with_members(chat_id, current_user_id, self.presence_repo)
+        if not detail:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat topilmadi yoki siz uning a'zosi emassiz",
+            )
+        return detail
 
 
 def chat_service(

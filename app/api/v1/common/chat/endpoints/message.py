@@ -1,10 +1,7 @@
-import os
-from pathlib import Path
-
 from fastapi import APIRouter, Query, Depends, Body, status, UploadFile, File
-from uuid import uuid4
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.schemas.chat.message_schema import MessageCreate, MessageUpdate, ReactionRequest, MessageMarkAsReadRequest
+from app.services.chat.attachment_service import ChatAttachmentService, get_chat_attachment_service
 from app.services.chat.message_service import MessageService, get_message_service
 
 message_router = APIRouter(prefix="/messages", tags=["Messages"])
@@ -16,7 +13,7 @@ async def mark_as_read(
     current_user=Depends(get_current_user),
     service: MessageService = Depends(get_message_service),
 ):
-    await service.message_mark_as_read(body.message_ids)
+    await service.message_mark_as_read(body.message_ids, current_user.id)
     return {"status": "ok"}
 
 
@@ -35,9 +32,10 @@ async def get_history(
         chat_id: int,
         limit: int = Query(50, le=100),
         before_id: str = Query(None),
+        current_user=Depends(get_current_user),
         service: MessageService = Depends(get_message_service),
 ):
-    return await service.get_history(chat_id, limit, before_id)
+    return await service.get_history(chat_id, current_user.id, limit, before_id)
 
 
 @message_router.patch("/{message_id}")
@@ -72,37 +70,19 @@ async def toggle_reaction(
 @message_router.post("/{message_id}/view")
 async def view_message(
         message_id: str,
+        current_user=Depends(get_current_user),
         service: MessageService = Depends(get_message_service),
 ):
-    await service.view_message(message_id)
+    await service.view_message(message_id, current_user.id)
     return {"status": "ok"}
 
 
 
 
-UPLOAD_DIR = Path("/app/media/uploads")
-
-
 @message_router.post("/files/upload")
-async def upload_file(file: UploadFile = File(...)):
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-    ext = file.filename.split(".")[-1]
-    filename = f"{uuid4()}.{ext}"
-    file_path = UPLOAD_DIR / filename
-
-    size = 0
-
-    with open(file_path, "wb") as buffer:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            size += len(chunk)
-            buffer.write(chunk)
-
-    return {
-        "file_name": file.filename,
-        "file_url": f"/media/uploads/{filename}",
-        "size": size,
-    }
+async def upload_file(
+        file: UploadFile = File(...),
+        current_user=Depends(get_current_user),
+        service: ChatAttachmentService = Depends(get_chat_attachment_service),
+):
+    return await service.save_attachment(file)

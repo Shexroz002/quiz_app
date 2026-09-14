@@ -36,6 +36,25 @@ class ChatRepository:
         )
         return result.scalar_one_or_none()
 
+    async def is_member(self, chat_id: int, user_id: int) -> bool:
+        member = await self.get_member(chat_id, user_id)
+        return member is not None
+
+    async def get_member_chat_ids(self, chat_ids: list[int], user_id: int) -> set[int]:
+        """Berilgan chatlardan foydalanuvchi a'zo bo'lganlarini bitta so'rovda qaytaradi."""
+        if not chat_ids:
+            return set()
+
+        stmt = (
+            select(ChatMember.chat_id)
+            .where(
+                ChatMember.chat_id.in_(chat_ids),
+                ChatMember.user_id == user_id,
+            )
+        )
+        result = await self.db.execute(stmt)
+        return {row[0] for row in result.all()}
+
     async def get_user_chats(self, user_id: int, limit: int = 30, offset: int = 0):
         stmt = (
             select(Chat, ChatMember)
@@ -123,7 +142,8 @@ class ChatRepository:
         await self.db.commit()
         return True
 
-    async def get_chat_detail_with_members(self,chat_id: int,current_user_id: int,redis) -> dict | None:
+    async def get_chat_detail_with_members(self, chat_id: int, current_user_id: int,
+                                           presence_repo) -> dict | None:
         member_stmt = (
             select(ChatMember)
             .where(
@@ -154,11 +174,12 @@ class ChatRepository:
         members_result = await self.db.execute(members_stmt)
         rows = members_result.all()
 
+        # Barcha a'zolarning presence'i bitta MGET bilan olinadi.
+        online_map = await presence_repo.is_online_bulk([user.id for _, user in rows])
+
         members = []
 
         for chat_member, user in rows:
-            is_online = bool(await redis.exists(f"online:{user.id}"))
-
             members.append({
                 "user_id": user.id,
                 "username": user.username,
@@ -168,7 +189,7 @@ class ChatRepository:
                 "role": chat_member.role.value,
                 "joined_at": chat_member.joined_at,
                 "last_read_message_id": chat_member.last_read_message_id,
-                "is_online": is_online,
+                "is_online": online_map.get(user.id, False),
             })
 
         return {

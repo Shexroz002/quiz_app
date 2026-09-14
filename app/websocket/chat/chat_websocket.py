@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocket
@@ -29,6 +30,9 @@ async def websocket_endpoint(ws: WebSocket):
         friend_ids = await get_user_friend_ids(session, user_id)
 
     user_id = int(user.id)
+    # Har bir ulanish uchun alohida belgi: shu ulanish publish qilgan eventlar
+    # unga qaytib kelmaydi, lekin foydalanuvchining boshqa qurilmalariga boradi.
+    origin_id = uuid.uuid4().hex
     channels = (
             [f"chat:{cid}" for cid in chat_ids] +
             [f"presence:{fid}" for fid in friend_ids] +
@@ -38,10 +42,14 @@ async def websocket_endpoint(ws: WebSocket):
     await pubsub.subscribe(*channels)
     await set_user_online(redis_client, user_id, online=True)
 
-    await ws.send_json({"type": "connection:ready", "subscribed_channels": len(channels)})
+    await ws.send_json({
+        "type": "connection:ready",
+        "subscribed_channels": len(channels),
+        "origin": origin_id,
+    })
 
-    redis_task = asyncio.create_task(_redis_to_client(pubsub, ws, user_id))
-    client_task = asyncio.create_task(_client_to_server(ws, user_id, redis_client, pubsub))
+    redis_task = asyncio.create_task(_redis_to_client(pubsub, ws, user_id, origin_id))
+    client_task = asyncio.create_task(_client_to_server(ws, user_id, redis_client, pubsub, origin_id))
 
     try:
 

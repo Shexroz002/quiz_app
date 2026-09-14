@@ -11,6 +11,10 @@ class StorageService:
         os.makedirs(self.upload_dir, exist_ok=True)
 
     async def save_pdf(self, file: UploadFile, dest_path: str) -> bool:
+        return await self.save(file, dest_path)
+
+    async def save(self, file: UploadFile, dest_path: str) -> bool:
+        """Faylni oqim bilan yozadi; hajm chegarasidan oshsa yozilganini o'chiradi."""
         total_size = 0
 
         try:

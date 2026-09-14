@@ -27,7 +27,9 @@ class Settings(BaseSettings):
 
     UPLOAD_DIR: str = "media/quiz/file"
     AVATAR_DIR: str = "media/avatars"
+    CHAT_UPLOAD_DIR: str = "media/uploads"
     MAX_PDF_SIZE: int = 5 * 1024 * 1024
+    MAX_CHAT_FILE_SIZE: int = 50 * 1024 * 1024
 
     GEMINI_API_KEY: str
     GEMINI_MODEL: str

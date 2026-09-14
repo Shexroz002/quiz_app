@@ -4,6 +4,7 @@ from fastapi.websockets import WebSocketDisconnect, WebSocket
 
 from app.core.database.base import AsyncSessionLocal
 from app.core.database.mongodb import get_mongo_db_to_method
+from app.services.chat.exceptions import ChatAccessDeniedError
 from app.services.chat.real_time_event_service import RealTimeEventService
 from app.websocket.chat.utils.event_type import EventType
 from app.websocket.chat.utils.presence import now_iso
@@ -34,7 +35,7 @@ def _build_event(channel: str, payload: dict) -> dict:
     return payload
 
 
-async def _redis_to_client(pubsub, ws, user_id: int):
+async def _redis_to_client(pubsub, ws, user_id: int, origin_id: str | None = None):
     """Redis event stream -> WebSocket (stable version)"""
 
     try:
@@ -48,8 +49,6 @@ async def _redis_to_client(pubsub, ws, user_id: int):
                 if message is None:
                     await asyncio.sleep(0.01)
                     continue
-
-                print("Received from Redis:", message)
 
                 # validate type
                 if message.get("type") != "message":
@@ -67,7 +66,16 @@ async def _redis_to_client(pubsub, ws, user_id: int):
                 except (json.JSONDecodeError, TypeError):
                     continue
 
-                if payload.get("sender_id") == int(user_id):
+                # "origin" - eventni publish qilgan ulanishning belgisi. Faqat
+                # o'sha ulanish o'tkazib yuboriladi; foydalanuvchining boshqa
+                # qurilmalari eventni oladi va sinxron qoladi.
+                origin = payload.pop("origin", None)
+                if origin is not None and origin == origin_id:
+                    continue
+
+                # O'z yozayotganingizni hech bir qurilmangizda ko'rsatmaymiz.
+                if (payload.get("type") == EventType.TYPING_UPDATE
+                        and payload.get("sender_id") == int(user_id)):
                     continue
 
                 # build event
@@ -95,54 +103,76 @@ async def _redis_to_client(pubsub, ws, user_id: int):
             pass
 
 
-async def _client_to_server(ws: WebSocket, user_id: int, redis, pubsub):
+async def _client_to_server(ws: WebSocket, user_id: int, redis, pubsub, origin_id: str | None = None):
     mongo_db = get_mongo_db_to_method()
     async with AsyncSessionLocal() as db:
-        real_time_event = RealTimeEventService(mongo_db, db, redis, pubsub)
+        real_time_event = RealTimeEventService(mongo_db, db, redis, pubsub, origin_id)
         try:
             while True:
                 raw = await ws.receive_text()
                 msg = json.loads(raw)
-                msg_type = msg.get("type")
-                if msg_type == EventType.MESSAGE_NEW:
-                    await real_time_event.message_new(msg, sender_id=user_id)
-
-                if msg_type == EventType.MESSAGE_FORWARD:
-                    await real_time_event.forward_message(msg, sender_id=user_id)
-
-                if msg_type == EventType.MESSAGE_EDITED:
-                    await real_time_event.message_edit(msg, sender_id=user_id)
-
-                if msg_type == EventType.MESSAGE_DELETED:
-                    await real_time_event.message_deleted(msg, sender_id=user_id)
-
-                if msg_type == EventType.MESSAGE_REACTION_ADD:
-                    await real_time_event.message_reaction_add(msg, sender_id=user_id)
-
-                if msg_type == EventType.MESSAGE_READ:
-                    await real_time_event.message_mark_as_read(msg, sender_id=user_id)
-
-                if msg_type == EventType.CHAT_CREATED:
-                    await real_time_event.new_chat(msg, sender_id=user_id)
-
-                elif msg_type == EventType.TYPING_UPDATE:
-                    await real_time_event.typing_update(msg, int(user_id))
-
-                elif msg_type == EventType.HEARTBEAT:
-                    # Heartbeat - presence TTL ni yangilaymiz
-                    await redis.setex(f"online:{user_id}", 60, "1")
-
-                elif msg_type == EventType.CHAT_CREATED:
-                    # Yangi chatga qo'shilish - dinamik subscribe
-                    chat_id = msg["chat_id"]
-                    await pubsub.subscribe(f"chat:{chat_id}")
-
-                elif msg_type == EventType.CHAT_LEAVED:
-                    chat_id = msg["chat_id"]
-                    await pubsub.unsubscribe(f"chat:{chat_id}")
+                try:
+                    ack = await _handle_client_event(real_time_event, msg, user_id, redis, pubsub)
+                    if ack:
+                        # Echo o'chirilgani uchun server bergan message_id/chat_id
+                        # yuboruvchiga aynan shu ack orqali yetadi.
+                        await ws.send_json(ack)
+                except ChatAccessDeniedError as exc:
+                    # Ruxsat xatosi ulanishni uzmaydi - clientga xabar qaytaramiz.
+                    await ws.send_json({
+                        "type": EventType.ERROR,
+                        "event": msg.get("type"),
+                        "detail": exc.detail,
+                    })
+                finally:
+                    # Har bir eventdan keyin tranzaksiyani yopamiz. Aks holda
+                    # a'zolik SELECT'i ochgan tranzaksiya butun ulanish davomida
+                    # "idle in transaction" bo'lib pool ulanishini band qiladi.
+                    # Rollback yozuvlarga ta'sir qilmaydi - ular allaqachon
+                    # commit qilingan; bu faqat ochiq read tranzaksiyasini yopadi.
+                    await db.rollback()
 
         except WebSocketDisconnect:
             return
+
+
+async def _handle_client_event(real_time_event, msg: dict, user_id: int, redis, pubsub) -> dict | None:
+    """Eventni bajaradi; yuboruvchiga qaytariladigan ack bo'lsa uni qaytaradi."""
+    msg_type = msg.get("type")
+
+    if msg_type == EventType.MESSAGE_NEW:
+        return await real_time_event.message_new(msg, sender_id=user_id)
+
+    elif msg_type == EventType.MESSAGE_FORWARD:
+        return await real_time_event.forward_message(msg, sender_id=user_id)
+
+    elif msg_type == EventType.MESSAGE_EDITED:
+        await real_time_event.message_edit(msg, sender_id=user_id)
+
+    elif msg_type == EventType.MESSAGE_DELETED:
+        await real_time_event.message_deleted(msg, sender_id=user_id)
+
+    elif msg_type == EventType.MESSAGE_REACTION_ADD:
+        await real_time_event.message_reaction_add(msg, sender_id=user_id)
+
+    elif msg_type == EventType.MESSAGE_READ:
+        await real_time_event.message_mark_as_read(msg, sender_id=user_id)
+
+    elif msg_type == EventType.CHAT_CREATED:
+        return await real_time_event.new_chat(msg, sender_id=user_id)
+
+    elif msg_type == EventType.TYPING_UPDATE:
+        await real_time_event.typing_update(msg, int(user_id))
+
+    elif msg_type == EventType.HEARTBEAT:
+        await redis.setex(f"online:{user_id}", 60, "1")
+
+    elif msg_type == EventType.CHAT_LEAVED:
+        chat_id = msg.get("chat_id")
+        if chat_id is not None:
+            await pubsub.unsubscribe(f"chat:{chat_id}")
+
+    return None
 
 
 async def set_user_online(redis, user_id: str, online: bool):

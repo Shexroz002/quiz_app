@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import suppress
 
 from fastapi import FastAPI
@@ -8,12 +9,16 @@ from fastapi_pagination import add_pagination
 
 from app.api.v1.common.chat.router import base_chat_router
 from app.api.v1.router import api_router
+from app.core.database.mongodb import get_mongo_db_to_method
+from app.repositories.chat.message_repo import MessageRepository
 from app.bot.handlers.webapp import router as telegram_webapp_router
 from app.websocket import quiz_session_ws_router, notification_ws_router
 from app.websocket.chat.chat_websocket import chat_ws_router
 from app.websocket.pdf_job_ws import job_ws_router
 from app.websocket.student_session_ws import quiz_sessions
 from app.websocket.redis_events import consume_realtime_events
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Test Platform API")
 
@@ -37,6 +42,16 @@ app.include_router(chat_ws_router)
 app.include_router(job_ws_router)
 app.include_router(quiz_sessions)
 app.include_router(base_chat_router)
+
+
+@app.on_event("startup")
+async def ensure_mongo_indexes() -> None:
+    # Indeks yaratilmasa ham API ishga tushishi kerak - Mongo hozircha
+    # yetib bo'lmas bo'lsa, faqat ogohlantiramiz.
+    try:
+        await MessageRepository(get_mongo_db_to_method()).ensure_indexes()
+    except Exception:
+        logger.exception("Mongo `messages` indekslarini yaratib bo'lmadi")
 
 
 @app.on_event("startup")

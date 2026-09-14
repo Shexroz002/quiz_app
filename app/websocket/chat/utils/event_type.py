@@ -15,3 +15,4 @@ class EventType(StrEnum):
     CHAT_UPDATED = "chat:updated"
     CHAT_LEAVED = "chat:leaved"
     HEARTBEAT = "heartbeat:heartbeat"
+    ERROR = "error"

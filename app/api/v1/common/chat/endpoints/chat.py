@@ -23,6 +23,21 @@ async def get_chat_list(
     )
 
 
+
+@chat_router.get("/my", response_model=list[ChatResponse])
+async def my_chats(
+        current_user=Depends(get_current_user),
+        chat_services=Depends(chat_service),
+        limit: int = Query(30, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+):
+    return await chat_services.get_my_chats(
+        current_user_id=current_user.id,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @chat_router.get("/{chat_id}", response_model=ChatDetailOut)
 async def get_chat(
         chat_id: int,
@@ -54,14 +69,6 @@ async def create_or_get_private(
         current_user_id=current_user.id,
         data=data,
     )
-
-
-@chat_router.get("/my", response_model=list[ChatResponse])
-async def my_chats(
-        current_user=Depends(get_current_user),
-        chat_services=Depends(chat_service),
-):
-    return await chat_services.get_my_chats(current_user.id)
 
 
 @chat_router.delete("/{chat_id}/leave", status_code=204)

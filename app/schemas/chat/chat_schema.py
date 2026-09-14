@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 from app.models.chat.chats import ChatType
@@ -21,7 +23,7 @@ class ChatResponse(BaseModel):
     avatar_url: str | None
     owner_id: int
     last_message_text: str | None
-    last_message_created_at: str | None
+    last_message_created_at: datetime | None
 
     class Config:
         from_attributes = True

@@ -3,15 +3,37 @@ from typing import Any, Mapping
 from bson import ObjectId
 from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pymongo import ReturnDocument
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from app.schemas.chat.message_schema import MessageCreate, MessageUpdate
 from app.utils.datetime import UTC, as_tashkent_datetime, utc_now
 
 
+def to_object_id(value: str) -> ObjectId | None:
+    """Client'dan kelgan id ni xavfsiz ObjectId ga o'giradi, noto'g'ri bo'lsa None."""
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        return None
+
+
 class MessageRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.col = db["messages"]
+
+    async def ensure_indexes(self) -> None:
+        """`messages` uchun indekslar. create_index idempotent - qayta chaqirsa no-op."""
+        # get_chat_messages: chat_id+deleted bo'yicha filtr, _id bo'yicha range va sort.
+        # get_unread_counts ham shu shaklda ishlaydi.
+        await self.col.create_index(
+            [("chat_id", ASCENDING), ("deleted", ASCENDING), ("_id", DESCENDING)],
+            name="chat_history_idx",
+        )
+        # get_last_message: chat_id+deleted bo'yicha filtr, created_at bo'yicha sort.
+        await self.col.create_index(
+            [("chat_id", ASCENDING), ("deleted", ASCENDING), ("created_at", DESCENDING)],
+            name="chat_last_message_idx",
+        )
 
     async def create(self, data: MessageCreate) -> dict:
         doc = {
@@ -75,10 +97,22 @@ class MessageRepository:
         return new_message
 
     async def get_by_id(self, message_id: str) -> Mapping[str, Any] | None:
-        doc = await self.col.find_one({"_id": ObjectId(message_id), "deleted": False})
+        oid = to_object_id(message_id)
+        if oid is None:
+            return None
+        doc = await self.col.find_one({"_id": oid, "deleted": False})
         if doc:
             doc["_id"] = str(doc["_id"])
         return doc
+
+    async def get_chat_ids_for_messages(self, message_ids: list[str]) -> set[int]:
+        """Berilgan xabarlar qaysi chatlarga tegishli ekanini qaytaradi (ruxsat tekshirish uchun)."""
+        object_ids = [oid for oid in (to_object_id(mid) for mid in message_ids) if oid]
+        if not object_ids:
+            return set()
+
+        cursor = self.col.find({"_id": {"$in": object_ids}}, {"chat_id": 1})
+        return {doc["chat_id"] async for doc in cursor}
 
     async def get_chat_messages(
             self,

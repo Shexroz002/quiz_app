@@ -4,7 +4,7 @@ This file records implemented architecture only. Paths are repository-relative.
 
 ## Runtime And Layering
 
-- `app/main.py`: FastAPI composition root. Mounts `/media`, CORS, pagination, `/api/v1` routers, four primary WebSocket routers, the session-monitoring WebSockets, and chat HTTP routes. It also owns the Redis real-time event consumer lifecycle. `GET /` is a health response.
+- `app/main.py`: FastAPI composition root. Mounts `/media`, CORS, pagination, `/api/v1` routers, four primary WebSocket routers, the session-monitoring WebSockets, and chat HTTP routes. It also owns the Redis real-time event consumer lifecycle and calls `MessageRepository.ensure_indexes` on startup, logging rather than failing when Mongo is unreachable. `GET /` is a health response.
 - Request flow is normally endpoint -> service -> repository -> database. FastAPI dependencies construct services and authenticated users.
 - PostgreSQL via async SQLAlchemy stores users, quizzes, sessions, groups, notifications, chat metadata, and reactions. MongoDB stores chat message documents. Redis stores presence/live-session state and carries chat/PDF pub-sub events. Celery runs AI/PDF and Telegram room tasks.
 - `app/core/database/base.py`: canonical FastAPI `engine`, Celery `celery_engine` with `NullPool`, `AsyncSessionLocal`, `CeleryAsyncSessionLocal`, declarative `Base`, and `get_db`.
@@ -49,7 +49,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/models/notification/notification.py`: `NotificationType`, `NotificationActionType`.
 - `app/schemas/account/users/users.py`: response/filter `StudentStatus`.
 - `app/schemas/sessions/session_monitoring.py` and `app/schemas/quiz/session_monitoring.py`: transport `ParticipantLiveStatus` and `ConnectionStatus`; the Redis service uses the `sessions` version while snapshot output uses the `quiz` version.
-- `app/websocket/chat/utils/event_type.py`: `EventType` for chat/presence WebSocket messages.
+- `app/websocket/chat/utils/event_type.py`: `EventType` for chat/presence WebSocket messages, including the `ERROR` frame used for denied events and the `MESSAGE_ACK` frame returned to a message sender.
 
 ## Repositories And Data Access
 
@@ -66,9 +66,9 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/repositories/quiz/pdf_job_repo.py:PDFJobRepository`: create/get job, attach Celery task ID, and update job status/result fields.
 - `app/repositories/group/student_group_repository.py:StudentGroupRepository`: group/member mutation and validation; teacher/member list views; detail, performance, test-result, and student-ID aggregate queries.
 - `app/repositories/notification/notification_repo.py:NotificationRepo`: create/list/count notifications and mark one/all read.
-- `app/repositories/chat/chat_repo.py:ChatRepository`: SQL chat/member CRUD, membership/read cursors, cached last message, and member detail with Redis presence.
-- `app/repositories/chat/message_repo.py:MessageRepository`: Mongo `messages` collection create/forward/history/edit/soft-delete/reactions/views/read flags, last message, and unread counts.
-- `app/repositories/chat/presence_repository.py:PresenceRepository`: Redis online and last-seen single/bulk reads.
+- `app/repositories/chat/chat_repo.py:ChatRepository`: SQL chat/member CRUD, membership/read cursors, cached last message, and member detail; `get_chat_detail_with_members` takes a `PresenceRepository` rather than a raw Redis handle. `is_member` is the single membership predicate and `get_member_chat_ids` is its bulk form; both chat transports authorize through them.
+- `app/repositories/chat/message_repo.py:MessageRepository`: Mongo `messages` collection create/forward/history/edit/soft-delete/reactions/views/read flags, last message, and unread counts. `get_chat_ids_for_messages` resolves owning chats for authorization, and the module-level `to_object_id` is the shared tolerant parser for client-supplied ids. `ensure_indexes` owns the collection's indexes - `chat_history_idx` (`chat_id`, `deleted`, `_id`) serves history paging and unread counts, `chat_last_message_idx` (`chat_id`, `deleted`, `created_at`) serves the last-message lookup. Mongo has no migration runner here, so new index needs belong in that method.
+- `app/repositories/chat/presence_repository.py:PresenceRepository`: the single reader of chat presence. Online state lives under the `online:{user_id}` key and last-seen under `last_seen:{user_id}`; `presence:{user_id}` is the pub/sub channel, never a key. `ChatService` and `ChatRepository.get_chat_detail_with_members` resolve presence through its bulk methods, one MGET per request rather than one call per user.
 
 ## Services And Business Logic
 
@@ -85,8 +85,10 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/services/redis_service/session_live.py:SessionLiveStateService`: Redis participant JSON state, set membership and TTL; online/offline/heartbeat, answer progress, and current-question updates.
 - `app/services/quiz/session_monitoring_service.py:SessionMonitoringService`: builds monitoring snapshots from `SessionLiveStateService`.
 - `app/services/chat/chat_service.py:ChatService`: group/private chat creation, membership, list/detail assembly across SQL metadata, Mongo messages, and Redis presence. `_make_direct_key` is the canonical private-chat key helper.
-- `app/services/chat/message_service.py:MessageService`: HTTP-facing Mongo message validation and CRUD/reaction/read/view operations.
-- `app/services/chat/real_time_event_service.py:RealTimeEventService`: WebSocket event business logic; mutates Mongo/SQL, updates chat previews/read cursors, creates direct chats, and publishes Redis events.
+- `app/services/chat/message_service.py:MessageService`: HTTP-facing Mongo message validation and CRUD/reaction/read/view operations. It also owns HTTP authorization: it takes a `ChatRepository` alongside the Mongo handle, and `_ensure_member`/`_ensure_message_access` gate every operation, so message-id-only routes resolve the owning chat before acting.
+- `app/services/chat/attachment_service.py:ChatAttachmentService`: chat file-upload validation and persistence over `StorageService`. `ALLOWED_CONTENT_TYPES` is the single content-type allowlist and the only source of the stored extension, so a client filename can never shape the path; SVG and HTML are deliberately excluded because `/media` is served statically. Oversized uploads are refused from the declared size before any write, with the streaming cap as the backstop.
+- `app/services/chat/exceptions.py`: `ChatAccessDeniedError` and its `MessageNotFoundError` subclass; the transport-neutral denial raised by `RealTimeEventService` and translated to an `ERROR` frame by the WebSocket dispatcher. HTTP code raises `HTTPException` directly instead.
+- `app/services/chat/real_time_event_service.py:RealTimeEventService`: WebSocket event business logic; mutates Mongo/SQL, updates chat previews/read cursors, creates direct chats, and publishes Redis events. Every handler authorizes first through `_ensure_member`, and `_load_accessible_message` takes the chat id from the stored message rather than the client payload so an event cannot be published into a chat the message does not belong to. Forwarding requires membership in both the source and target chats. Every published payload carries the publishing connection's `origin`, and `message_new`/`forward_message`/`new_chat` return a `message:ack` dict so the sender learns the server-assigned message id (and, for a new direct chat, its chat id) without relying on a self-echo.
 - `app/services/ai/base.py`: provider contract and `AIQuizParseRequest`/`AIQuizParseResult` dataclasses.
 - `app/services/ai/ai_service.py:AIQuizParser`: provider-agnostic PDF and description orchestration returning structured quiz data plus image maps.
 - `app/services/ai/providers/provider_factory.py:get_provider`: configured provider factory; currently returns Gemini or Mistral. OpenAI is not enabled in the factory.
@@ -95,7 +97,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/services/ai/providers/openai_provider.py:OpenAIProvider`: placeholder provider returning empty data; do not treat it as a working pipeline.
 - `app/services/ai/promt.py`: canonical quiz prompts and JSON schemas; `ai_generator_by_description` builds description prompts.
 - `app/services/ai/ai_report_generation.py:report_generation`: deterministic recommendation text from subject statistics; despite its path, it does not call an AI provider.
-- `app/services/pdf/storage_service.py:StorageService`: chunked size-limited async file persistence; shared by PDF, avatar, and Telegram uploads.
+- `app/services/pdf/storage_service.py:StorageService`: chunked size-limited async file persistence; shared by PDF, avatar, chat-attachment, and Telegram uploads. `save` is the generic entry point and `save_pdf` is the retained alias for existing callers.
 - `app/services/pdf/pdf_service.py:PDFService`: PyMuPDF/Pillow image extraction, test-PDF heuristic, hashing, and base64 image-map persistence.
 - `app/services/pdf/pdf_job_service.py:PDFJobService`: validates/stores uploads, creates `PDFJob`, and queues PDF or description tasks.
 - `app/services/pdf/redis_pubsub_service.py`: commits job status and publishes `pdf_job:{job_id}` events.
@@ -129,7 +131,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/api/v1/teacher/quiz/endpoints/quiz.py` under `/api/v1/teacher/quizzes`: teacher quiz list/statistics/detail/delete/update.
 - `app/api/v1/teacher/quiz_session/endpoints/group_quiz_live.py` under `/api/v1/teacher/quiz-sessions/live`: group-session create/host finish/running list/results/detail/accuracy/leaderboard/info/participants/start/questions/monitoring.
 - `app/api/v1/teacher/statistics/endpoints/card.py` under `/api/v1/teacher/statistic`: dashboard cards, activity chart, analytics overview, group results, weak topics, and weak students.
-- `app/api/v1/common/chat/endpoints/chat.py` and `message.py`: mounted by `app/main.py` directly at `/chats` and `/messages`, not under `/api/v1`; chat CRUD/list/detail and Mongo message CRUD/history/reactions/read/view/file upload.
+- `app/api/v1/common/chat/endpoints/chat.py` and `message.py`: mounted by `app/main.py` directly at `/chats` and `/messages`, not under `/api/v1`; chat CRUD/list/detail and Mongo message CRUD/history/reactions/read/view/file upload. Every route on both routers requires `get_current_user`; membership itself is enforced in the services, not the controllers. `GET /chats/my` returns plain chat metadata and must stay declared above `GET /chats/{chat_id}`, which would otherwise capture `my` as a path parameter.
 - `app/bot/handlers/webapp.py`: mounted directly by `app/main.py` at `/api/v1/bot`; authenticates Telegram init-data and exposes thin managed-room state/questions/answer/finish endpoints, the single-player result handoff endpoint, `GET /sessions/{session_id}/analysis/` behind `build_attempt_analysis`, and the owner-scoped `GET /quizzes/{quiz_id}/review/` question-review read model built from `QuizService.detail` and `QuestionService.list_by_quiz`.
 
 ## Schemas And DTOs
@@ -145,7 +147,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/schemas/sessions/session_monitoring.py`: Redis/live participant state, table response, event, and live quiz card. `app/schemas/quiz/session_monitoring.py`: API snapshot/event counterpart used by monitoring service.
 - `app/schemas/quiz/quiz_live.py`: alternate basic live-session command DTOs; no current imports were found. Prefer the actively used `quiz_session.py` and `quiz_attempt.py` types before extending this file.
 - `app/schemas/group/student_group.py`: create/update, cards/detail, member rows, performance, cover image, and test result DTOs.
-- `app/schemas/chat/chat_schema.py`, `chat_list.py`, `message_schema.py`: chat creation/response/list/detail/member and Mongo message/attachment/reaction/read DTOs.
+- `app/schemas/chat/chat_schema.py`, `chat_list.py`, `message_schema.py`: chat creation/response/list/detail/member and Mongo message/attachment/reaction/read DTOs. `ChatResponse.last_message_created_at` is a `datetime`, matching the column it serializes.
 - `app/schemas/notification/notification.py`: notification sender/create/response/read DTOs.
 - `app/schemas/statistic/teacher_dashboard.py` and `teacher_statistics.py`: activity chart, overview cards, group performance, weak topics/students and filters.
 - `app/api/v1/teacher/quiz/params/quiz_filter.py` and `app/api/v1/teacher/my_student/params/student_filter.py`: FastAPI query/filter DTOs.
@@ -160,8 +162,8 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/websocket/notification_manager.py:NotificationConnectionManager` and `notification_ws.py`: authenticated per-user sockets and service-driven notification/count delivery.
 - `app/services/redis_service/realtime_events.py` and `app/websocket/redis_events.py`: Redis pub/sub bridge for worker-originated notification and quiz-session events to FastAPI-owned WebSocket managers.
 - `app/websocket/pdf_job_ws.py`: owner-authorized job snapshot plus Redis `pdf_job:{job_id}` stream until completed/failed.
-- `app/websocket/chat/chat_websocket.py`: `/ws/chat`; subscribes to chat, friend-presence and user Redis channels, manages presence, and runs two directional tasks.
-- `app/websocket/chat/utils/chat_ws.py`: Redis-to-client envelope conversion and client-to-`RealTimeEventService` dispatch. `presence.py` owns TTL/last-seen helpers and SQL chat/contact channel discovery.
+- `app/websocket/chat/chat_websocket.py`: `/ws/chat`; subscribes to chat, friend-presence and user Redis channels, manages presence, and runs two directional tasks. It mints one `origin_id` per connection, reports it in `connection:ready`, and passes it to both tasks.
+- `app/websocket/chat/utils/chat_ws.py`: Redis-to-client envelope conversion and client-to-`RealTimeEventService` dispatch. `_handle_client_event` is the event switch; `_client_to_server` wraps it so a `ChatAccessDeniedError` returns an `ERROR` frame and keeps the socket open instead of dropping the connection, and forwards any returned ack to the sender. It rolls the SQL session back after every event: the session spans the whole WebSocket connection, so without that an authorization SELECT would leave the pooled connection `idle in transaction` for the connection's lifetime. Any new SQL added to this path must keep that per-event boundary. `_redis_to_client` suppresses echoes per connection by comparing the payload's `origin` to this connection's id - never per user, so the sender's other devices stay in sync - and strips `origin` before delivery. Own `typing:update` is the one event suppressed for every device of the user. `presence.py` owns TTL/last-seen helpers and SQL chat/contact channel discovery.
 - `app/websocket/chat/chat_ws_manager.py`: in-process multi-device connection registry. `app/repositories/chat/presence_repository.py` provides read-only Redis presence access.
 - `app/core/websocket/websocket_manager.py` is a separate generic manager with no imports found. Extend the active managers above before considering it.
 
@@ -187,7 +189,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 
 ## Shared Utilities, Security, And Configuration
 
-- `app/core/config.py:Settings`: `.env`-backed database/timezone, Redis/Celery, JWT, media limits/paths, Gemini/Mistral/OpenAI/DeepSeek, MongoDB, base URL, and Telegram settings.
+- `app/core/config.py:Settings`: `.env`-backed database/timezone, Redis/Celery, JWT, media limits/paths including `CHAT_UPLOAD_DIR`/`MAX_CHAT_FILE_SIZE` for chat attachments, Gemini/Mistral/OpenAI/DeepSeek, MongoDB, base URL, and Telegram settings.
 - `app/core/security/jwt.py`: access/refresh creation and decoding. `password_hash.py`: shared `pwdlib` hashing/verification. `app/api/v1/common/auth/dependencies/current_user.py`: OAuth2 bearer-to-user dependency.
 - `app/utils/datetime.py`: canonical UTC/Tashkent-aware now/conversion/day/week helpers. Use these instead of naive datetimes.
 - `app/services/pdf/pdf_service.py` is the implemented PDF/image utility. The similarly named `app/services/pdf_service.py`, `app/utils/pdf_utils.py`, `app/utils/latex_utils.py`, `app/utils/timer.py`, `app/services/session_service.py`, `app/workers/pdf_tasks.py`, `app/workers/celery_app.py`, `app/api/v1/common/chat/endpoints/file_upload.py`, and `app/schemas/quiz/test.py` are empty placeholders. `app/bot/handlers/profile.py` and `app/bot/middlewares/auth.py` contain no behavior.
