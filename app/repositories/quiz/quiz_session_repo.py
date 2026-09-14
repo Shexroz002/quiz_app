@@ -145,11 +145,14 @@ class QuizSessionRepository:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    async def get_session_questions_with_answers(self, session_id: int, host_id: int):
+    async def get_session_questions_with_answers(self, session_id: int, user_id: int):
 
         sp_id_sq = (
             select(SessionParticipant.id)
-            .where(SessionParticipant.session_id == QuizSession.id)
+            .where(
+                SessionParticipant.session_id == QuizSession.id,
+                SessionParticipant.user_id == user_id,
+            )
             .order_by(SessionParticipant.id.asc())
             .limit(1)
             .correlate(QuizSession)

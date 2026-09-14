@@ -52,6 +52,17 @@ class _SessionContext:
 
 
 class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These tests own room publishing; the per-participant analysis outbox has
+        # its own suite, so keep its extra queries out of the fake session here.
+        for target, replacement in (
+            ("create_room_analysis_deliveries", AsyncMock(return_value=[])),
+            ("queue_room_analysis_deliveries", lambda ids: None),
+        ):
+            patcher = patch(f"app.bot.services.quiz_room.{target}", replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     async def test_group_room_creation_sends_private_host_control(self):
         user = SimpleNamespace(id=22)
         session = SimpleNamespace(

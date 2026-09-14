@@ -38,3 +38,23 @@ class TelegramSinglePlayerResultDelivery(BaseModel):
     delivered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+
+
+class TelegramRoomAnalysisDelivery(BaseModel):
+    """Private-chat outbox for one room participant's personal analysis message."""
+
+    __tablename__ = "telegram_room_analysis_deliveries"
+
+    attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_attempts.id", ondelete="CASCADE"), unique=True
+    )
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("quiz_sessions.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )

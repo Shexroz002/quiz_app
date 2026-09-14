@@ -15,6 +15,10 @@ from app.bot.keyboards.quiz_room import (
     room_webapp_url,
 )
 from app.bot.models import TelegramQuizRoom
+from app.bot.services.room_analysis import (
+    create_room_analysis_deliveries,
+    queue_room_analysis_deliveries,
+)
 from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
 from app.models import Quiz, QuizSession, SessionParticipant, User
@@ -346,8 +350,10 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
                     parse_mode="HTML",
                     disable_web_page_preview=True,
                 )
+                analysis_ids = await create_room_analysis_deliveries(db, session_id)
                 room.leaderboard_delivered_at = await service.now()
                 await db.commit()
+                queue_room_analysis_deliveries(analysis_ids)
                 return
         else:
             participants = await service.participant_repo.get_participant_list(
@@ -427,9 +433,12 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
                 if "message is not modified" not in str(exc).lower():
                     raise
             room.published_revision = revision
+        analysis_ids = []
         if session.status == "finished" and room.leaderboard_delivered_at is None:
+            analysis_ids = await create_room_analysis_deliveries(db, session_id)
             room.leaderboard_delivered_at = await service.now()
         await db.commit()
+        queue_room_analysis_deliveries(analysis_ids)
 
 
 async def send_room_start_to_participants(

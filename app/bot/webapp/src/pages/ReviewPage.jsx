@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, CheckCircle2, ChevronLeft, ChevronRight, Grid3X3, Moon, Search, Sun, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Grid3X3, Moon, Search, Sun, Zap } from 'lucide-react';
 import AnswerOptions from '../components/AnswerOptions';
 import Question from '../components/Question';
 import { authenticate, getQuizReview, setCorrectOption } from '../api/quiz';
-import { closeTelegram, getQuizId, initTelegram } from '../utils/telegram';
+import { closeTelegram, getQuizId, getTelegramTheme, initTelegram } from '../utils/telegram';
 
 const correctLabelOf = (question) => (question.options || []).find((option) => option.is_correct)?.label;
 
@@ -12,7 +12,7 @@ export default function ReviewPage() {
   const [current, setCurrent] = useState(0);
   const [saving, setSaving] = useState(false);
   const [showNavigator, setShowNavigator] = useState(false);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(getTelegramTheme);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -42,10 +42,23 @@ export default function ReviewPage() {
   }, [loadReview]);
 
   const question = state.questions[current];
-  const markedCount = useMemo(
-    () => state.questions.filter((item) => correctLabelOf(item)).length,
+  const total = state.questions.length;
+  const missing = useMemo(
+    () => state.questions.reduce((indexes, item, index) => (
+      correctLabelOf(item) ? indexes : [...indexes, index]
+    ), []),
     [state.questions],
   );
+
+  const goToNextProblem = () => {
+    const next = missing.find((index) => index > current) ?? missing[0];
+    if (next !== undefined) {
+      setCurrent(next);
+      setShowNavigator(false);
+    }
+  };
+
+  const finishReview = () => setState((value) => ({ ...value, status: 'done' }));
 
   const chooseCorrect = async (label) => {
     if (!question || saving) return;
@@ -88,7 +101,9 @@ export default function ReviewPage() {
     return <main className="app-shell"><section className="card result">
       <CheckCircle2 className="result-icon" size={44} aria-hidden="true" />
       <h1>Savollar tekshirildi</h1>
-      <p>O‘zgarishlar saqlandi. Endi testni Telegramdagi tugmalar orqali boshlashingiz mumkin.</p>
+      <p>{missing.length
+        ? `O‘zgarishlar saqlandi. ${missing.length} ta savolda to‘g‘ri javob hali belgilanmagan.`
+        : 'O‘zgarishlar saqlandi. Endi testni Telegramdagi tugmalar orqali boshlashingiz mumkin.'}</p>
       <button type="button" onClick={closeTelegram}>Telegramga qaytish</button>
     </section></main>;
   }
@@ -100,7 +115,6 @@ export default function ReviewPage() {
         <button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === 'dark' ? 'light' : 'dark')} title="Mavzuni almashtirish" aria-label="Mavzuni almashtirish">
           {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
         </button>
-        <span className="notification-icon" aria-hidden="true"><Bell size={18} /><i /></span>
       </div>
     </header>
 
@@ -109,18 +123,25 @@ export default function ReviewPage() {
         <span className="status-icon" aria-hidden="true"><Search size={20} /></span>
         <div className="progress-copy">
           <div className="progress-heading">
-            <strong>Savol {current + 1}/{state.questions.length}</strong>
-            <span className="answer-count">{markedCount}</span>
+            <strong>Savol {current + 1}/{total}</strong>
+            {missing.length > 0 && <button
+              className="answer-count warning"
+              type="button"
+              onClick={goToNextProblem}
+              title="To‘g‘ri javobi belgilanmagan savolga o‘tish"
+            >
+              <AlertTriangle size={12} aria-hidden="true" />&nbsp;{missing.length}
+            </button>}
           </div>
           <div className="progress-line">
-            <progress value={markedCount} max={state.questions.length || 1} aria-label="To‘g‘ri javobi belgilangan savollar" />
-            <span>{state.questions.length ? Math.round((markedCount / state.questions.length) * 100) : 0}%</span>
+            <progress value={current + 1} max={total || 1} aria-label="Tekshirilgan savollar" />
+            <span>{total ? Math.round(((current + 1) / total) * 100) : 0}%</span>
           </div>
         </div>
         <button className="icon-button" type="button" onClick={() => setShowNavigator(value => !value)} title="Savollar ro‘yxati" aria-label="Savollar ro‘yxati">
           <Grid3X3 size={19} />
         </button>
-        <button className="icon-button icon-button-primary" type="button" onClick={() => setState(value => ({ ...value, status: 'done' }))} title="Tekshiruvni yakunlash" aria-label="Tekshiruvni yakunlash">
+        <button className="icon-button icon-button-primary" type="button" onClick={finishReview} title="Tekshiruvni yakunlash" aria-label="Tekshiruvni yakunlash">
           <CheckCircle2 size={18} />
         </button>
       </section>
@@ -129,7 +150,7 @@ export default function ReviewPage() {
         {state.questions.map((item, index) => <button
           type="button"
           key={item.id}
-          className={`${index === current ? 'active' : ''} ${correctLabelOf(item) ? 'answered' : ''}`}
+          className={`${index === current ? 'active' : ''} ${correctLabelOf(item) ? 'answered' : 'missing'}`}
           onClick={() => { setCurrent(index); setShowNavigator(false); }}
         >{index + 1}</button>)}
       </nav>}
@@ -142,7 +163,7 @@ export default function ReviewPage() {
           {question.difficulty && <span className="tag tag-level">{question.difficulty}</span>}
         </div>
         <Question question={question} />
-        <p className="review-hint">
+        <p className={`review-hint ${correctLabelOf(question) ? '' : 'warning'}`}>
           {correctLabelOf(question)
             ? 'To‘g‘ri javob noto‘g‘ri bo‘lsa, to‘g‘ri variantni belgilang.'
             : '⚠️ Bu savolda to‘g‘ri javob belgilanmagan. To‘g‘ri variantni tanlang.'}
@@ -157,9 +178,9 @@ export default function ReviewPage() {
           <button className="nav-button" type="button" onClick={() => setCurrent((value) => value - 1)} disabled={current === 0}>
             <ChevronLeft size={18} /> <span>Oldingi</span>
           </button>
-          {current < state.questions.length - 1
+          {current < total - 1
             ? <button className="nav-button primary" type="button" onClick={() => setCurrent((value) => value + 1)}><span>Keyingi</span> <ChevronRight size={18} /></button>
-            : <button className="nav-button primary" type="button" onClick={() => setState(value => ({ ...value, status: 'done' }))}><span>Tayyor</span> <ChevronRight size={18} /></button>}
+            : <button className="nav-button primary" type="button" onClick={finishReview}><span>Tayyor</span> <ChevronRight size={18} /></button>}
         </nav>
       </article> : <section className="question-card empty-state"><h1>Savollar topilmadi</h1></section>}
     </main>

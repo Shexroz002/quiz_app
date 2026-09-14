@@ -4,8 +4,13 @@ import logging
 from aiogram import Bot
 from sqlalchemy import or_, select
 
-from app.bot.models import TelegramQuizRoom, TelegramSinglePlayerResultDelivery
+from app.bot.models import (
+    TelegramQuizRoom,
+    TelegramRoomAnalysisDelivery,
+    TelegramSinglePlayerResultDelivery,
+)
 from app.bot.services.quiz_room import publish_room
+from app.bot.services.room_analysis import deliver_room_analysis
 from app.bot.services.single_player_result import deliver_single_player_result
 from app.core.celery_app import celery_app
 from app.core.config import settings
@@ -34,10 +39,17 @@ async def _recover_rooms():
                 TelegramSinglePlayerResultDelivery.delivered_at.is_(None)
             )
         )).scalars().all()
+        analysis_ids = (await db.execute(
+            select(TelegramRoomAnalysisDelivery.id).where(
+                TelegramRoomAnalysisDelivery.delivered_at.is_(None)
+            )
+        )).scalars().all()
     for session_id in ids:
         maintain_room.delay(session_id)
     for delivery_id in delivery_ids:
         deliver_result.delay(delivery_id)
+    for analysis_id in analysis_ids:
+        deliver_analysis.delay(analysis_id)
 
 
 @celery_app.task(name="telegram.maintain_room", autoretry_for=(Exception,),
@@ -69,6 +81,27 @@ def deliver_result(delivery_id):
 async def _deliver_result(delivery_id):
     async with Bot(settings.TELEGRAM_BOT_TOKEN) as bot:
         await deliver_single_player_result(
+            bot,
+            delivery_id,
+            session_factory=CeleryAsyncSessionLocal,
+        )
+
+
+@celery_app.task(
+    name="telegram.deliver_room_analysis",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    max_retries=5,
+    queue="telegram_quiz",
+)
+def deliver_analysis(delivery_id):
+    asyncio.run(_deliver_analysis(delivery_id))
+
+
+async def _deliver_analysis(delivery_id):
+    async with Bot(settings.TELEGRAM_BOT_TOKEN) as bot:
+        await deliver_room_analysis(
             bot,
             delivery_id,
             session_factory=CeleryAsyncSessionLocal,

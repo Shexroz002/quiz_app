@@ -756,6 +756,12 @@ class QuizSessionService:
             raise HTTPException(status_code=404, detail="Session not found")
         if quiz_session.session_type != SessionType.individual:
             raise HTTPException(status_code=400, detail="Session is not single-player")
+        return await self.get_finished_attempt_result(session_id, user_id)
+
+    async def get_finished_attempt_result(self, session_id: int, user_id: int):
+        quiz_session = await self.session_repo.player_session(session_id)
+        if not quiz_session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
         participant = await self.participant_repo.get_by_session_user(session_id, user_id)
         if not participant:

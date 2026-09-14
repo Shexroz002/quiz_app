@@ -34,6 +34,7 @@ RESULTS_LIST_PAGE = "results:page:"
 RESULTS_CURRENT = "results:current"
 CHALLENGE_CALLBACK_PREFIX = "challenge:"
 WEBAPP_REVIEW_MODE = "review"
+WEBAPP_ANALYSIS_MODE = "analysis"
 
 _TUNNEL_LOG = Path("/tunnel/cloudflared.log")
 _QUICK_TUNNEL_PATTERN = re.compile(r"https://[-a-z0-9]+\.trycloudflare\.com")
@@ -108,12 +109,8 @@ def quiz_review_webapp_keyboard(quiz_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def quiz_webapp_url(
-    quiz_id: int,
-    duration_minutes: int | None = None,
-    *,
-    mode: str | None = None,
-) -> str:
+def webapp_url(**params: str | int | None) -> str:
+    """Mini App URL with the given query parameters; raises without an HTTPS base."""
     webapp_base_url = settings.TELEGRAM_WEBAPP_URL
     if urlsplit(webapp_base_url or "").scheme != "https":
         try:
@@ -127,12 +124,40 @@ def quiz_webapp_url(
     if url.scheme != "https":
         raise ValueError("HTTPS Web App URL is not available")
     query = dict(parse_qsl(url.query))
-    query["quiz_id"] = str(quiz_id)
-    if duration_minutes is not None:
-        query["duration_minutes"] = str(duration_minutes)
-    if mode is not None:
-        query["mode"] = mode
+    for key, value in params.items():
+        if value is not None:
+            query[key] = str(value)
     return urlunsplit(url._replace(query=urlencode(query)))
+
+
+def quiz_webapp_url(
+    quiz_id: int,
+    duration_minutes: int | None = None,
+    *,
+    mode: str | None = None,
+) -> str:
+    return webapp_url(
+        quiz_id=quiz_id,
+        duration_minutes=duration_minutes,
+        mode=mode,
+    )
+
+
+def analysis_webapp_url(session_id: int) -> str:
+    return webapp_url(session_id=session_id, mode=WEBAPP_ANALYSIS_MODE)
+
+
+def analysis_webapp_keyboard(session_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📈 Batafsil tahlil",
+                    web_app=WebAppInfo(url=analysis_webapp_url(session_id)),
+                )
+            ],
+        ]
+    )
 
 
 def quiz_catalog_pagination_keyboard(

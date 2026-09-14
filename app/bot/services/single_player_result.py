@@ -1,12 +1,12 @@
 """Durable private-chat delivery for finished single-player quiz results."""
 
 import logging
-from html import escape
 
 from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.bot.models import TelegramSinglePlayerResultDelivery
+from app.bot.services.analysis_message import analysis_keyboard, format_analysis_message
 from app.core.database.base import AsyncSessionLocal
 from app.models.quiz.real_time_quiz.quiz_session import SessionType
 from app.services.quiz.quiz_session import QuizSessionService
@@ -74,26 +74,8 @@ async def request_single_player_result_delivery(db, session_id: int, user):
 
 
 def format_single_player_result(result: dict) -> str:
-    total = result["total_questions"]
-    answered = result["answered_questions"]
-    correct = result["correct_answers"]
-    seconds_total = result["spend_time"]
-    minutes, seconds = divmod(seconds_total, 60)
-    lines = [
-        "✅ <b>Test yakunlandi!</b>",
-        f"📚 <b>{escape(result['quiz_title'][:180])}</b>",
-    ]
-    if result.get("subject"):
-        lines.append(f"📖 {escape(result['subject'][:80])}")
-    lines.extend(
-        [
-            f"🎯 To'g'ri javoblar: <b>{correct}/{total}</b>",
-            f"📝 Javob berilgan: <b>{answered}/{total}</b>",
-            f"📊 Natija: <b>{result['percentage']:g}%</b>",
-            f"⏱ Sarflangan vaqt: <b>{minutes:02}:{seconds:02}</b>",
-        ]
-    )
-    return "\n".join(lines)
+    """The shared analysis body; a solo attempt has no leaderboard to show."""
+    return format_analysis_message(result)
 
 
 async def deliver_single_player_result(bot, delivery_id: int, session_factory=AsyncSessionLocal) -> None:
@@ -116,6 +98,7 @@ async def deliver_single_player_result(bot, delivery_id: int, session_factory=As
             chat_id=delivery.chat_id,
             text=format_single_player_result(result),
             parse_mode="HTML",
+            reply_markup=analysis_keyboard(delivery.session_id),
         )
         delivery.delivered_at = utc_now()
         await db.commit()

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
+from app.bot.services.analysis_view import build_attempt_analysis
 from app.bot.services.quiz_room import queue_room_maintenance
 from app.bot.services.single_player_result import request_single_player_result_delivery
 from app.bot.services.webapp_auth import validate_init_data
@@ -81,6 +82,15 @@ async def quiz_review(
         "subject": quiz.subject,
         "questions": questions,
     }
+
+
+@router.get("/sessions/{session_id}/analysis/")
+async def session_analysis(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await build_attempt_analysis(db, session_id, current_user.id)
 
 
 @router.get("/rooms/{session_id}/state/")

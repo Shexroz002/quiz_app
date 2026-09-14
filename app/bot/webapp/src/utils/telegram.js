@@ -5,6 +5,10 @@ export function initTelegram() {
   return app?.initData || '';
 }
 
+export function getTelegramTheme() {
+  return window.Telegram?.WebApp?.colorScheme === 'light' ? 'light' : 'dark';
+}
+
 export function closeTelegram() {
   window.Telegram?.WebApp?.close?.();
 }
@@ -17,8 +21,19 @@ export function getQuizId() {
   return Number(value);
 }
 
+const MODES = ['review', 'analysis'];
+
 export function getMode() {
-  return new URLSearchParams(window.location.search).get('mode') === 'review' ? 'review' : 'quiz';
+  const value = new URLSearchParams(window.location.search).get('mode');
+  return MODES.includes(value) ? value : 'quiz';
+}
+
+export function getSessionId() {
+  const value = new URLSearchParams(window.location.search).get('session_id');
+  if (!value || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1) {
+    throw new Error('Tahlil havolasi yaroqsiz. Botdan qayta oching.');
+  }
+  return Number(value);
 }
 
 export function getQuizDuration() {

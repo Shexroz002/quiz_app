@@ -12,7 +12,11 @@ from app.models.quiz import *
 from app.models.group.student_group import *
 from app.models.chat.chats import *
 from app.models.chat.chat_members import *
-from app.bot.models import TelegramQuizRoom, TelegramSinglePlayerResultDelivery
+from app.bot.models import (
+    TelegramQuizRoom,
+    TelegramRoomAnalysisDelivery,
+    TelegramSinglePlayerResultDelivery,
+)
 config = context.config
 
 # Interpret the config file for Python logging.

@@ -62,7 +62,36 @@ class SinglePlayerResultFormattingTests(TestCase):
 
         self.assertIn("Algebra &lt;Basics&gt;", text)
         self.assertIn("Math &amp; Logic", text)
-        self.assertIn("7/10", text)
-        self.assertIn("8/10", text)
-        self.assertIn("70%", text)
-        self.assertIn("02:05", text)
+        self.assertIn("🎯 Natija: <b>7/10 · 70%</b>", text)
+        self.assertIn("⚪️ Javobsiz: <b>2</b>", text)
+        self.assertIn("⏱ <b>02:05</b>", text)
+        # A solo attempt has no room, so none of the leaderboard lines appear.
+        self.assertNotIn("Xonada:", text)
+        self.assertNotIn("o‘rtacha natija", text)
+
+    def test_topic_breakdown_reaches_the_single_player_message(self):
+        text = format_single_player_result(
+            {
+                "quiz_title": "Matematika test savollari",
+                "subject": "Matematika",
+                "total_questions": 30,
+                "answered_questions": 30,
+                "correct_answers": 11,
+                "wrong_answers": 19,
+                "percentage": 36.67,
+                "spend_time": 45,
+                "topic_statistic": [
+                    {"topic_name": "Geometriya", "total_questions": 10, "correct_answers": 3},
+                    {"topic_name": "Vektorlar", "total_questions": 4, "correct_answers": 4},
+                    {"topic_name": "Hisoblashlar", "total_questions": 1, "correct_answers": 0},
+                ],
+            }
+        )
+
+        self.assertIn("🔻 <b>Zaif mavzular</b>", text)
+        self.assertIn("• Geometriya — 3/10 · 30%", text)
+        self.assertIn("🟢 <b>Kuchli mavzular</b>", text)
+        self.assertIn("• Vektorlar — 4/4 · 100%", text)
+        self.assertIn("Eng ko‘p yo‘qotish — <b>Geometriya</b>: 10 tadan 7 tasi.", text)
+        # One-question topics stay out of both lists.
+        self.assertNotIn("Hisoblashlar", text)

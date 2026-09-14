@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, CheckCircle2, ChevronLeft, ChevronRight, Moon, Sun, Zap } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Moon, Sun, Zap } from 'lucide-react';
 import AnswerOptions from '../components/AnswerOptions';
 import Question from '../components/Question';
 import QuizProgress from '../components/QuizProgress';
@@ -17,7 +17,7 @@ import {
   submitAnswer,
   submitRoomAnswer,
 } from '../api/quiz';
-import { closeTelegram, getQuizDuration, getQuizId, getRoomSession, initTelegram } from '../utils/telegram';
+import { closeTelegram, getQuizDuration, getQuizId, getRoomSession, getTelegramTheme, initTelegram } from '../utils/telegram';
 
 const sessionKey = (quizId, durationMinutes) => `telegram-quiz-session:${quizId}:${durationMinutes}`;
 const roomCompletionKey = (sessionId, userId) => `telegram-room-completed:${userId}:${sessionId}`;
@@ -43,7 +43,7 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [showNavigator, setShowNavigator] = useState(false);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(getTelegramTheme);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -291,7 +291,6 @@ export default function QuizPage() {
         <button className="icon-button theme-toggle" type="button" onClick={() => setTheme(value => value === 'dark' ? 'light' : 'dark')} title="Mavzuni almashtirish" aria-label="Mavzuni almashtirish">
           {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
         </button>
-        <span className="notification-icon" aria-hidden="true"><Bell size={18} /><i /></span>
       </div>
     </header>
 
