@@ -8,6 +8,9 @@ class RegistrationState(StatesGroup):
 
 class QuizGenerationState(StatesGroup):
     waiting_for_pdf = State()
+    waiting_for_ai_subject = State()
+    waiting_for_ai_description = State()
+    waiting_for_ai_question_count = State()
 
 
 class QuizDurationState(StatesGroup):

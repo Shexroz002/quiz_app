@@ -84,6 +84,32 @@ def format_received_text(filename: str | None) -> str:
     )
 
 
+def _is_ai_job(data: dict) -> bool:
+    """A description job has no uploaded file — only the topic the user typed."""
+    return not data.get("file_name") and bool((data.get("description") or "").strip())
+
+
+def _source_line(data: dict) -> str:
+    if not _is_ai_job(data):
+        return f"📎 {data.get('file_name') or 'PDF fayl'}"
+    description = (data.get("description") or "").strip()
+    summary = description if len(description) <= 90 else f"{description[:87]}..."
+    line = f"📝 {summary}"
+    count = data.get("number_questions")
+    return f"{line}\n❓ {count} ta savol" if count else line
+
+
+def format_ai_received_text(description: str, question_count: int) -> str:
+    return format_progress_text(
+        {
+            "status": "queued",
+            "progress": 0,
+            "description": description,
+            "number_questions": question_count,
+        }
+    )
+
+
 def _safe_user_error(data: dict) -> str | None:
     error = str(data.get("error") or "").strip()
     if not error or len(error) > 300 or "\n" in error:
@@ -104,18 +130,22 @@ def _safe_user_error(data: dict) -> str | None:
     return error
 
 
-def format_failed_text(error: str | None = None) -> str:
+def format_failed_text(error: str | None = None, *, ai: bool = False) -> str:
     lines = [
         "😕 Testni yaratib bo‘lmadi",
         "",
-        "PDF faylni qayta ishlashda muammo yuz berdi.",
+        "Mavzu bo‘yicha test yaratishda muammo yuz berdi."
+        if ai
+        else "PDF faylni qayta ishlashda muammo yuz berdi.",
     ]
     if error:
         lines.extend(["", error])
     lines.extend(
         [
             "",
-            "Faylni tekshirib, yana bir marta urinib ko‘ring.",
+            "Mavzuni aniqroq yozib, yana urinib ko‘ring."
+            if ai
+            else "Faylni tekshirib, yana bir marta urinib ko‘ring.",
         ]
     )
     return "\n".join(lines)
@@ -124,7 +154,8 @@ def format_failed_text(error: str | None = None) -> str:
 def format_progress_text(data: dict) -> str:
     status = _progress_status(data)
     progress = int(data.get("progress") or 0)
-    filename = data.get("file_name") or "PDF fayl"
+    is_ai = _is_ai_job(data)
+    source = _source_line(data)
     bar = progress_bar(progress)
 
     if status == "COMPLETED":
@@ -141,11 +172,19 @@ def format_progress_text(data: dict) -> str:
             "ishlashingiz yoki do‘stlaringiz bilan boshlashingiz mumkin. 🚀"
         )
     if status == "FAILED":
-        return format_failed_text(_safe_user_error(data))
+        return format_failed_text(_safe_user_error(data), ai=is_ai)
     if status == "AI_PREPARING":
+        if is_ai:
+            return (
+                "🧠 Mavzu tahlil qilinmoqda\n\n"
+                f"{source}\n\n"
+                "AI mavzu bo‘yicha savollar rejasini tuzmoqda.\n\n"
+                f"{bar} {progress}%\n\n"
+                "⏳ Biroz kuting..."
+            )
         return (
             "🔍 PDF tahlil qilinmoqda\n\n"
-            f"📎 {filename}\n\n"
+            f"{source}\n\n"
             "AI fayldagi savollar, rasmlar va formulalarni aniqlamoqda.\n\n"
             f"{bar} {progress}%\n\n"
             "⏳ Biroz kuting..."
@@ -153,8 +192,8 @@ def format_progress_text(data: dict) -> str:
     if status == "QUESTIONS_GENERATING":
         return (
             "🧠 Savollar tayyorlanmoqda\n\n"
-            f"📎 {filename}\n\n"
-            "PDF tahlil qilindi ✅\n"
+            f"{source}\n\n"
+            f"{'Mavzu tahlil qilindi' if is_ai else 'PDF tahlil qilindi'} ✅\n"
             "Hozir savollar va javob variantlari yaratilmoqda.\n\n"
             f"{bar} {progress}%\n\n"
             "✨ Test deyarli tayyor..."
@@ -168,6 +207,12 @@ def format_progress_text(data: dict) -> str:
             "⏳ Yana bir oz..."
         )
 
+    if is_ai:
+        return (
+            "✨ AI test yaratmoqda\n\n"
+            f"{source}\n\n"
+            "⏳ Jarayon boshlandi..."
+        )
     return format_received_text(data.get("file_name"))
 
 
@@ -182,6 +227,8 @@ async def get_pdf_job_snapshot(job_id: str) -> dict | None:
                 PDFJob.question_count,
                 PDFJob.error,
                 PDFJob.file_name,
+                PDFJob.description,
+                PDFJob.number_questions,
                 Quiz.title.label("quiz_title"),
                 Quiz.subject,
             )
@@ -202,6 +249,8 @@ async def get_pdf_job_snapshot(job_id: str) -> dict | None:
             "question_count": job["question_count"],
             "error": job["error"],
             "file_name": job["file_name"],
+            "description": job["description"],
+            "number_questions": job["number_questions"],
             "quiz_title": job["quiz_title"],
             "subject": job["subject"],
         }

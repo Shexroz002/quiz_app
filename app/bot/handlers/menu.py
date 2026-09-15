@@ -31,6 +31,7 @@ from app.bot.keyboards.inline import (
     quiz_catalog_pagination_keyboard,
     quiz_custom_duration_keyboard,
     quiz_duration_keyboard,
+    quiz_create_mode_keyboard,
     result_history_pagination_keyboard,
     quiz_webapp_keyboard,
 )
@@ -44,6 +45,12 @@ from app.bot.keyboards.reply import (
     main_menu_keyboard,
 )
 from app.bot.states import QuizDurationState, QuizGenerationState
+
+QUIZ_SOURCE_PROMPT = (
+    "Testni qanday yaratamiz?\n\n"
+    "📄 PDF fayldan — tayyor savollarni faylingizdan oladi\n"
+    "✨ AI orqali — siz yozgan mavzu bo‘yicha savollar tuzadi"
+)
 from app.bot.services.quiz_room import create_room, parse_duration
 from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
@@ -424,9 +431,9 @@ async def show_main_menu(message: Message) -> None:
 
 
 @router.message(F.text == MENU_TEST_CREATE_TEXT)
-async def request_pdf_for_quiz_from_menu(message: Message, state: FSMContext):
-    await state.set_state(QuizGenerationState.waiting_for_pdf)
-    await message.answer("PDF fayl yuboring. Test shu fayldan yaratiladi.")
+async def request_quiz_source_from_menu(message: Message, state: FSMContext):
+    await state.set_state(None)
+    await message.answer(QUIZ_SOURCE_PROMPT, reply_markup=quiz_create_mode_keyboard())
 
 
 @router.message(F.text.in_({MENU_TESTS_TEXT, MENU_TEST_WORK_TEXT}))
@@ -459,10 +466,10 @@ async def handle_menu_message(message: Message, state: FSMContext):
 
 
 @router.callback_query(F.data == MENU_TEST_CREATE)
-async def request_pdf_for_quiz(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(QuizGenerationState.waiting_for_pdf)
+async def request_quiz_source(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(None)
     await callback.answer()
-    await callback.message.answer("PDF fayl yuboring. Test shu fayldan yaratiladi.")
+    await callback.message.answer(QUIZ_SOURCE_PROMPT, reply_markup=quiz_create_mode_keyboard())
 
 
 @router.callback_query(F.data.in_({MENU_TESTS, MENU_TEST_WORK}))

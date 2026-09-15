@@ -64,6 +64,7 @@ class PDFJobService:
             message="So'rovingiz ko'rib chiqilmoqda...",
         )
         job_new = await self.repo.create(job)
+        await self.db.commit()
 
         task = generate_quiz_from_description_task.delay(str(job.id))
         await self.repo.set_task_id(job, task.id)

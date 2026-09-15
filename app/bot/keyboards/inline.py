@@ -8,6 +8,13 @@ from app.core.config import settings
 
 MENU_TEST_WORK = "menu:test_work"
 MENU_TEST_CREATE = "menu:test_create"
+MENU_TEST_CREATE_PDF = "create:pdf"
+MENU_TEST_CREATE_AI = "create:ai"
+AI_SUBJECT_PAGE = "ai:subjects:page:"
+AI_SUBJECT_PICK = "ai:subject:"
+AI_COUNT_SET = "ai:count:"
+AI_COUNT_CUSTOM = "ai:count-custom"
+AI_CANCEL = "ai:cancel"
 MENU_TESTS = "menu:tests"
 MENU_RESULTS = "menu:results"
 MENU_JOIN_LIVE_SESSION = "menu:join_live_session"
@@ -43,6 +50,64 @@ _QUICK_TUNNEL_PATTERN = re.compile(r"https://[-a-z0-9]+\.trycloudflare\.com")
 def challenge_callback(owner_id: int, action: str, *values: int) -> str:
     parts = (CHALLENGE_CALLBACK_PREFIX.removesuffix(":"), str(owner_id), action)
     return ":".join((*parts, *(str(value) for value in values)))
+
+
+AI_SUBJECT_PAGE_SIZE = 8
+AI_QUESTION_COUNT_CHOICES = (10, 15, 20, 30)
+AI_MIN_QUESTIONS = 5
+AI_MAX_QUESTIONS = 50
+
+
+def quiz_create_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📄 PDF fayldan", callback_data=MENU_TEST_CREATE_PDF)],
+            [InlineKeyboardButton(text="✨ AI orqali", callback_data=MENU_TEST_CREATE_AI)],
+        ]
+    )
+
+
+def ai_subject_keyboard(subjects, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{subject['icon']} {subject['name']}".strip(),
+                callback_data=f"{AI_SUBJECT_PICK}{subject['id']}",
+            )
+        ]
+        for subject in subjects
+    ]
+    if total_pages > 1:
+        navigation = []
+        if page > 1:
+            navigation.append(
+                InlineKeyboardButton(text="‹ Oldingi", callback_data=f"{AI_SUBJECT_PAGE}{page - 1}")
+            )
+        navigation.append(
+            InlineKeyboardButton(text=f"{page} / {total_pages}", callback_data=f"{AI_SUBJECT_PAGE}{page}")
+        )
+        if page < total_pages:
+            navigation.append(
+                InlineKeyboardButton(text="Keyingi ›", callback_data=f"{AI_SUBJECT_PAGE}{page + 1}")
+            )
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton(text="✖️ Bekor qilish", callback_data=AI_CANCEL)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ai_question_count_keyboard() -> InlineKeyboardMarkup:
+    def count_button(count: int) -> InlineKeyboardButton:
+        return InlineKeyboardButton(text=f"{count} ta", callback_data=f"{AI_COUNT_SET}{count}")
+
+    choices = list(AI_QUESTION_COUNT_CHOICES)
+    rows = [choices[index:index + 2] for index in range(0, len(choices), 2)]
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            *[[count_button(count) for count in row] for row in rows],
+            [InlineKeyboardButton(text="✏️ Qo‘lda kiritish", callback_data=AI_COUNT_CUSTOM)],
+            [InlineKeyboardButton(text="✖️ Bekor qilish", callback_data=AI_CANCEL)],
+        ]
+    )
 
 
 def grade_keyboard() -> InlineKeyboardMarkup:
