@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -18,6 +19,30 @@ from app.bot.models import (
     TelegramSinglePlayerResultDelivery,
 )
 config = context.config
+
+
+def _alembic_url() -> str:
+    """The database URL, taken from DATABASE_URL like the rest of the app.
+
+    Alembic runs on psycopg2 while the app runs on asyncpg, so the driver is
+    swapped here rather than duplicating the credentials in alembic.ini - a
+    second copy there silently goes stale the moment the password changes.
+    """
+    url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or ""
+    if not url:
+        raise SystemExit(
+            "DATABASE_URL topilmadi: migratsiya uchun muhit o'zgaruvchisini bering."
+        )
+    scheme, separator, rest = url.partition("://")
+    scheme = scheme.split("+", 1)[0]
+    if scheme == "postgres":
+        scheme = "postgresql"
+    url = f"{scheme}+psycopg2{separator}{rest}"
+    # ConfigParser treats % as interpolation, and passwords may contain it.
+    return url.replace("%", "%%")
+
+
+config.set_main_option("sqlalchemy.url", _alembic_url())
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

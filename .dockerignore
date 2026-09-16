@@ -10,8 +10,9 @@
 # A virtualenv built against the host, not the image.
 .venv
 venv
-__pycache__
-*.py[cod]
+# A bare name only matches at the root, so these need the ** prefix.
+**/__pycache__
+**/*.py[cod]
 .pytest_cache
 .mypy_cache
 
