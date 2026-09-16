@@ -45,6 +45,7 @@ from app.bot.keyboards.reply import (
     main_menu_keyboard,
 )
 from app.bot.states import QuizDurationState, QuizGenerationState
+from app.bot.utils.subjects import SUBJECT_ICONS, subject_icon  # noqa: F401  (re-export)
 
 QUIZ_SOURCE_PROMPT = (
     "Testni qanday yaratamiz?\n\n"
@@ -69,17 +70,6 @@ MENU_MESSAGES = {
 
 MENU_TEXT_MESSAGES = {
     MENU_JOIN_LIVE_SESSION_TEXT: MENU_MESSAGES[MENU_JOIN_LIVE_SESSION],
-}
-
-SUBJECT_ICONS = {
-    "matematika": "📐",
-    "algebra": "📐",
-    "geometriya": "📐",
-    "fizika": "⚛️",
-    "kimyo": "🧪",
-    "biologiya": "🧬",
-    "tarix": "🏛️",
-    "ingliz": "🔤",
 }
 
 
@@ -186,14 +176,6 @@ async def get_telegram_user_quiz(telegram_id: int, quiz_id: int):
     if user is None or not user.is_active:
         return None
     return await get_quiz_card(quiz_id, user.id)
-
-
-def subject_icon(subject: str | None) -> str:
-    normalized_subject = (subject or "").lower()
-    return next(
-        (icon for keyword, icon in SUBJECT_ICONS.items() if keyword in normalized_subject),
-        "📘",
-    )
 
 
 def format_quiz_card(quiz) -> str:

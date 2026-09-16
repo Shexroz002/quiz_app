@@ -3,7 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class RegistrationState(StatesGroup):
     waiting_for_contact = State()
-    waiting_for_grade = State()
+    waiting_for_subjects = State()
 
 
 class QuizGenerationState(StatesGroup):

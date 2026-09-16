@@ -8,6 +8,8 @@ from app.core.config import settings
 
 MENU_TEST_WORK = "menu:test_work"
 MENU_TEST_CREATE = "menu:test_create"
+REG_SUBJECT_TOGGLE = "reg:subject:"
+REG_SUBJECT_DONE = "reg:subjects:done"
 MENU_TEST_CREATE_PDF = "create:pdf"
 MENU_TEST_CREATE_AI = "create:ai"
 AI_SUBJECT_PAGE = "ai:subjects:page:"
@@ -110,12 +112,29 @@ def ai_question_count_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def grade_keyboard() -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(text=f"{grade}-sinf", callback_data=f"grade:{grade}")]
-        for grade in range(5, 12)
+def registration_subject_keyboard(subjects, selected) -> InlineKeyboardMarkup:
+    """Multi-select subject list; the last row confirms and shows the count.
+
+    Selection lives in the FSM state, not in the markup, so the keyboard is
+    rebuilt from scratch on every toggle.
+    """
+    chosen = set(selected)
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if subject['id'] in chosen else '▫️'} {subject['icon']} {subject['name']}",
+                callback_data=f"{REG_SUBJECT_TOGGLE}{subject['id']}",
+            )
+        ]
+        for subject in subjects
     ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    rows.append([
+        InlineKeyboardButton(
+            text=f"Tasdiqlash ({len(chosen)})" if chosen else "Kamida bitta fan tanlang",
+            callback_data=REG_SUBJECT_DONE,
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _webapp_or_callback_button(

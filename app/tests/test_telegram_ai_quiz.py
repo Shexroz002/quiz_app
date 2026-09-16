@@ -58,8 +58,9 @@ class CreateModeKeyboardTests(TestCase):
 
 class SubjectPagingTests(IsolatedAsyncioTestCase):
     async def _page(self, subjects, page):
-        with patch("app.bot.handlers.quiz.SubjectService") as service, patch(
-            "app.bot.handlers.quiz.AsyncSessionLocal"
+        # load_subjects_page endi umumiy app.bot.utils.subjects loader'iga tayanadi
+        with patch("app.bot.utils.subjects.SubjectService") as service, patch(
+            "app.bot.utils.subjects.AsyncSessionLocal"
         ) as factory:
             factory.return_value.__aenter__ = AsyncMock(return_value=SimpleNamespace())
             factory.return_value.__aexit__ = AsyncMock(return_value=False)

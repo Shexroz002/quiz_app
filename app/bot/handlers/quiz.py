@@ -25,7 +25,7 @@ from app.bot.keyboards.inline import (
     quiz_review_webapp_keyboard,
     quiz_webapp_keyboard,
 )
-from app.bot.handlers.menu import subject_icon
+from app.bot.utils.subjects import load_subjects
 from app.bot.states import QuizGenerationState
 from app.bot.utils.progress import (
     edit_progress_message,
@@ -43,7 +43,6 @@ from app.core.database.redis import get_redis_client
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.services.pdf.pdf_job_service import PDFJobService
 from app.services.pdf.storage_service import StorageService
-from app.services.subject.subject_service import SubjectService
 
 router = Router()
 
@@ -100,12 +99,7 @@ async def _watch_job(bot, chat_id: int, status_message, job) -> None:
 
 
 async def load_subjects_page(page: int):
-    async with AsyncSessionLocal() as db:
-        subjects = await SubjectService(db).list()
-    rows = [
-        {"id": subject.id, "name": subject.name, "icon": subject.icon or subject_icon(subject.name)}
-        for subject in subjects
-    ]
+    rows = await load_subjects()
     total_pages = max(1, -(-len(rows) // AI_SUBJECT_PAGE_SIZE))
     page = min(max(page, 1), total_pages)
     start = (page - 1) * AI_SUBJECT_PAGE_SIZE
@@ -156,18 +150,17 @@ async def pick_ai_subject(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Fan tanlanmadi.", show_alert=True)
         return
 
-    async with AsyncSessionLocal() as db:
-        subjects = await SubjectService(db).list()
-    subject = next((item for item in subjects if item.id == int(subject_id)), None)
+    subjects = await load_subjects()
+    subject = next((item for item in subjects if item["id"] == int(subject_id)), None)
     if subject is None:
         await callback.answer("Bu fan topilmadi.", show_alert=True)
         return
 
-    await state.update_data(ai_subject_id=subject.id, ai_subject_name=subject.name)
+    await state.update_data(ai_subject_id=subject["id"], ai_subject_name=subject["name"])
     await state.set_state(QuizGenerationState.waiting_for_ai_description)
     await callback.answer()
     await callback.message.answer(
-        f"Fan: <b>{subject.name}</b>\n\n"
+        f"Fan: <b>{subject['name']}</b>\n\n"
         "Endi mavzuni yozing. Qanchalik aniq yozsangiz, test shunchalik mos bo‘ladi.\n\n"
         "Masalan: <i>9-sinf, aritmetik progressiya: hadni va yig‘indini topish</i>",
         parse_mode="HTML",

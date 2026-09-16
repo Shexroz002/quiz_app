@@ -468,3 +468,170 @@ docker compose logs -f --tail=100 quiz_bot
 docker compose logs -f --tail=100 quiz_celery
 sudo tail -f /var/log/nginx/error.log
 ```
+
+---
+
+## 11. Veb frontend (alohida React ilova)
+
+Bu ilova shu repoda emas — lokal kompyuterda build qilinadi, `dist/` server ga
+yuklanadi va nginx uni to'g'ridan-to'g'ri beradi. Serverda Node kerak emas.
+
+```
+myedunova.uz       ->  /var/www/myedunova.uz   (statik fayllar, Docker'siz)
+api.myedunova.uz   ->  127.0.0.1:8000
+app.myedunova.uz   ->  127.0.0.1:8080
+```
+
+### 11.1 DNS
+
+Apex domen va `www` uchun yozuvlar:
+
+```
+myedunova.uz.       A   <SERVER_IP>
+www.myedunova.uz.   A   <SERVER_IP>
+```
+
+### 11.2 Lokalda build
+
+Frontend API manzilini qayerdan olishini avval tekshiring:
+
+```bash
+grep -rn "VITE_API\|REACT_APP_API\|API_BASE\|baseURL" src/ | head
+```
+
+So'ng shu o'zgaruvchi bilan build qiling — **manzil build paytida bundle ichiga
+kiritiladi**, keyin o'zgartirib bo'lmaydi:
+
+```bash
+# Vite bo'lsa
+VITE_API_BASE_URL=https://api.myedunova.uz npm run build
+
+# Create React App bo'lsa
+REACT_APP_API_BASE_URL=https://api.myedunova.uz npm run build
+```
+
+Manzil kodda qattiq yozilgan bo'lsa, avval uni env o'zgaruvchisiga chiqaring —
+aks holda har deployda kodni tahrirlashga to'g'ri keladi.
+
+Build natijasini tekshiring:
+
+```bash
+grep -ro "https://api\.myedunova\.uz" dist/ | head -1    # topilishi kerak
+grep -ro "localhost:8000" dist/ | head -1                  # topilmasligi kerak
+```
+
+### 11.3 Serverga yuklash
+
+Katalogni bir marta yarating:
+
+```bash
+sudo mkdir -p /var/www/myedunova.uz
+sudo chown -R $USER:$USER /var/www/myedunova.uz
+```
+
+Lokal kompyuterdan:
+
+```bash
+rsync -avz --delete dist/ deploy@<SERVER_IP>:/var/www/myedunova.uz/
+```
+
+`--delete` eski fayllarni tozalaydi — hash nomli assetlar to'planib qolmaydi.
+
+### 11.4 Nginx
+
+Nginx'da `add_header` merosi "hammasi yoki hech nima": o'z `add_header` i bor
+`location` server blokidagi barcha sarlavhalarni **tushirib qoldiradi**. Shuning
+uchun xavfsizlik sarlavhalari alohida snippet'ga chiqarilib, har bir blokka
+qo'shiladi.
+
+```bash
+sudo mkdir -p /etc/nginx/snippets
+sudo tee /etc/nginx/snippets/myedunova-headers.conf >/dev/null <<'EOF'
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+EOF
+
+sudo tee /etc/nginx/sites-available/myedunova.uz >/dev/null <<'EOF'
+server {
+    listen 80;
+    server_name myedunova.uz www.myedunova.uz;
+
+    root /var/www/myedunova.uz;
+    index index.html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # Fayl nomida hash bor - mazmuni hech qachon eskirmaydi.
+    location /assets/ {
+        include /etc/nginx/snippets/myedunova-headers.conf;
+        add_header Cache-Control "public, immutable, max-age=31536000";
+        try_files $uri =404;
+    }
+
+    # index.html kesh qilinmaydi: u joriy asset nomlarini ko'rsatadi, eski
+    # nusxa deployni ko'rinmas qiladi.
+    location = /index.html {
+        include /etc/nginx/snippets/myedunova-headers.conf;
+        add_header Cache-Control "no-store";
+        try_files $uri =404;
+    }
+
+    # SPA: noma'lum yo'l - bu marshrut, yo'qolgan fayl emas.
+    location / {
+        include /etc/nginx/snippets/myedunova-headers.conf;
+        try_files $uri $uri/ /index.html;
+    }
+}
+EOF
+
+sudo ln -sf /etc/nginx/sites-available/myedunova.uz /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 11.5 Sertifikat
+
+```bash
+sudo certbot --nginx -d myedunova.uz -d www.myedunova.uz --redirect --agree-tos -m siz@example.com
+```
+
+### 11.6 Tekshirish
+
+```bash
+curl -sI https://myedunova.uz/ | head -1                         # 200
+curl -sI https://myedunova.uz/qandaydir/yolak | head -1           # 200 (SPA)
+curl -s https://myedunova.uz/ | grep -o '/assets/[^"]*\.js' | head -1
+
+# Bundle to'g'ri backendni ko'rsatyaptimi
+curl -s "https://myedunova.uz$(curl -s https://myedunova.uz/ \
+  | grep -o '/assets/index-[^"]*\.js' | head -1)" \
+  | grep -o 'https://api\.myedunova\.uz' | head -1
+```
+
+Brauzerda oching va **konsolni tekshiring**: CORS yoki `mixed content` xatosi
+bo'lmasligi kerak. WebSocket ishlatilsa, manzil `wss://api.myedunova.uz/ws/...`
+bo'lishi shart — `ws://` HTTPS sahifadan bloklanadi.
+
+### 11.7 Keyingi deploylar
+
+Bir buyruq yetarli:
+
+```bash
+VITE_API_BASE_URL=https://api.myedunova.uz npm run build \
+  && rsync -avz --delete dist/ deploy@<SERVER_IP>:/var/www/myedunova.uz/
+```
+
+Nginx'ni qayta yuklash shart emas — statik fayllar har so'rovda diskdan o'qiladi.
+
+### 11.8 Nosozliklar
+
+| Belgi | Sabab | Yechim |
+|---|---|---|
+| Sahifa ochiladi, so'rovlar ishlamaydi | Bundle'da eski/lokal API manzili | 11.2 dagi `grep` bilan tekshiring, qayta build qiling |
+| Konsolda CORS xatosi | API `Access-Control-Allow-Origin` bermayapti | `curl -sI -H "Origin: https://myedunova.uz" https://api.myedunova.uz/` |
+| Ichki yo'lda 404 (masalan `/dashboard`) | `try_files` yo'q | 11.4 dagi `location /` blokini tekshiring |
+| `mixed content` | Bundle'da `http://` manzil | HTTPS ga o'tkazing va qayta build qiling |
+| Eski versiya ko'rinaveradi | `index.html` keshlangan | `location = /index.html` da `no-store` borligini tekshiring |
+| Xavfsizlik sarlavhalari yo'q | `location` o'z `add_header` i bilan meros uzilgan | Har bir blokda `include .../myedunova-headers.conf` borligini tekshiring |

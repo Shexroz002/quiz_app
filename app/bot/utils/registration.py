@@ -4,23 +4,13 @@ from sqlalchemy import select
 
 from app.core.database.base import AsyncSessionLocal
 from app.core.security.password_hash import hash_password
-from app.models.account.user import EducationLevel, User, UserType
+from app.models.account.user import User, UserType
 from app.repositories.account import UserRepository
+from app.repositories.account.user_subject_repo import UserSubjectRepository
 
 
 class RegistrationConflictError(Exception):
     pass
-
-
-GRADE_TO_EDUCATION_LEVEL = {
-    "5": EducationLevel.CLASS_5,
-    "6": EducationLevel.CLASS_6,
-    "7": EducationLevel.CLASS_7,
-    "8": EducationLevel.CLASS_8,
-    "9": EducationLevel.CLASS_9,
-    "10": EducationLevel.CLASS_10,
-    "11": EducationLevel.CLASS_11,
-}
 
 
 async def get_user_by_telegram_id(telegram_id: int | str) -> User | None:
@@ -37,9 +27,14 @@ async def register_telegram_student(
     first_name: str,
     last_name: str,
     phone_number: str,
-    grade: str,
+    subject_ids: list[int],
     profile_image: str | None = None,
 ) -> User:
+    """Register (or link) the Telegram student and store the subjects they picked.
+
+    ``education_level`` is left alone: the bot no longer asks for a grade, and an
+    account linked by phone may already carry one set elsewhere.
+    """
     async with AsyncSessionLocal() as db:
         existing_by_telegram = await db.execute(
             select(User).where(User.telegram_id == str(telegram_id))
@@ -64,11 +59,11 @@ async def register_telegram_student(
                     "first_name": first_name or user.first_name,
                     "last_name": last_name or user.last_name,
                     "role": UserType.schoolboy,
-                    "education_level": GRADE_TO_EDUCATION_LEVEL[grade],
                     "profile_image": profile_image or user.profile_image,
                 },
                 commit=False,
             )
+            await UserSubjectRepository(db).create_or_update_subject(user.id, subject_ids)
             await db.commit()
             await db.refresh(user)
             return user
@@ -82,10 +77,11 @@ async def register_telegram_student(
                 "last_name": last_name,
                 "password_hash": hash_password(token_urlsafe(32)),
                 "role": UserType.schoolboy,
-                "education_level": GRADE_TO_EDUCATION_LEVEL[grade],
                 "profile_image": profile_image,
             }
         )
+        await db.flush()
+        await UserSubjectRepository(db).create_or_update_subject(user.id, subject_ids)
         await db.commit()
         await db.refresh(user)
         return user
