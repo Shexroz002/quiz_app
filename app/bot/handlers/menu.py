@@ -57,7 +57,7 @@ from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
 from app.models.quiz import Question, Quiz
 from app.models.quiz.real_time_quiz import QuizAttempt, QuizSession, SessionParticipant
-from app.repositories.quiz.quiz_repo import QuizRepository
+from app.repositories.quiz.quiz_repo import QuizRepository, visible_quiz_condition
 from app.utils.datetime import as_tashkent_datetime
 
 router = Router()
@@ -84,7 +84,7 @@ async def get_quiz_catalog_page(page: int, user_id: int):
     async with AsyncSessionLocal() as db:
         total = (
             await db.execute(
-                select(func.count(Quiz.id)).where(Quiz.user_id == user_id)
+                select(func.count(Quiz.id)).where(visible_quiz_condition(user_id))
             )
         ).scalar_one()
         total_pages = max(1, ceil(total / QUIZZES_PER_PAGE))
@@ -97,7 +97,7 @@ async def get_quiz_catalog_page(page: int, user_id: int):
                 func.count(Question.id).label("question_count"),
             )
             .outerjoin(Question, Question.quiz_id == Quiz.id)
-            .where(Quiz.user_id == user_id)
+            .where(visible_quiz_condition(user_id))
             .group_by(Quiz.id)
             .order_by(Quiz.created_at.desc())
             .offset((page - 1) * QUIZZES_PER_PAGE)

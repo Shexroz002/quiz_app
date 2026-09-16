@@ -4,7 +4,7 @@ from fastapi_pagination import Page
 
 from app.api.v1.common.auth.dependencies.current_user import get_current_user
 from app.models import User
-from app.schemas.quiz.quiz import QuizListSchema, QuizUpdateSchema, QuizDetailSchema, TopicStatisticResponse, \
+from app.schemas.quiz.quiz import QuizListSchema, QuizUpdateSchema, QuizUpdatedSchema, QuizDetailSchema, TopicStatisticResponse, \
     SubjectStatisticResponse, OverallStatisticCardsResponse
 from app.services.quiz.quiz_service import get_quiz_service
 
@@ -27,10 +27,15 @@ async def delete_quiz(quiz_id: int, current_user=Depends(get_current_user), serv
     return await service_layer.delete(quiz_id, current_user.id)
 
 
-@quiz_router.put("/{quiz_id}/", response_model=QuizListSchema)
+@quiz_router.put("/{quiz_id}/", response_model=QuizUpdatedSchema)
 async def update_quiz(quiz_id: int, update_data: QuizUpdateSchema, current_user=Depends(get_current_user),
                       service_layer=Depends(get_quiz_service)):
-    return await service_layer.update(quiz_id, current_user.id, update_data.model_dump())
+    # Only what the client actually sent: a full dump writes `None` over the
+    # subject and description whenever the caller omits them, which silently
+    # emptied them on a title-only edit.
+    return await service_layer.update(
+        quiz_id, current_user.id, update_data.model_dump(exclude_unset=True)
+    )
 
 
 @quiz_router.get("/analytics/topic", response_model=List[TopicStatisticResponse])

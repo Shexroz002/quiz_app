@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Optional
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
@@ -28,10 +28,17 @@ class QuizService:
         return await self.repo.get(quiz_id, user_id)
 
     async def update(self, quiz_id: int, user_id: int, update_data: dict):
-        return await self.repo.update(quiz_id, user_id, update_data)
+        quiz = await self.repo.update(quiz_id, user_id, update_data)
+        if quiz is None:
+            # The list also carries the shared catalogue, which nobody may edit.
+            raise HTTPException(404, "Quiz not found")
+        return quiz
 
     async def delete(self, quiz_id: int, user_id: int):
-        return await self.repo.delete(quiz_id, user_id)
+        quiz = await self.repo.delete(quiz_id, user_id)
+        if quiz is None:
+            raise HTTPException(404, "Quiz not found")
+        return quiz
 
     async def quiz_answer_list(self, quiz_id: int):
         def conver_list_do_dict(lst):
@@ -52,7 +59,13 @@ class QuizService:
         return await self.repo.get_quiz_statistics(quiz_id)
 
     async def detail(self, user_id, quiz_id):
-        return await self.repo.detail(user_id, quiz_id)
+        quiz = await self.repo.detail(user_id, quiz_id)
+        if quiz is None:
+            raise HTTPException(404, "Quiz not found")
+        # Transient, never persisted: the client needs the same answer the list
+        # gives, so a catalogue quiz does not offer an edit that would 404.
+        quiz.is_update = quiz.user_id is not None and quiz.user_id == user_id
+        return quiz
 
     async def topic_statistics(self, user_id: int, subject: str, search: str | None = None):
         return await self.repo.get_topic_statistics(user_id, subject, search)

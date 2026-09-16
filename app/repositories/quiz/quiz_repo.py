@@ -6,8 +6,55 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.functions import func
 
 from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
-from app.models import Quiz, Option, AttemptAnswer, QuizSession, SessionParticipant, QuizAttempt
+from app.models import (
+    AttemptAnswer,
+    Option,
+    Quiz,
+    QuizAttempt,
+    QuizSession,
+    SessionParticipant,
+    Subject,
+    UserSubject,
+)
 from app.models.quiz import Question
+
+
+def _normalized(column):
+    return func.lower(func.trim(column))
+
+
+def visible_quiz_condition(user_id: int):
+    """Quizzes a student is allowed to open.
+
+    Their own quizzes, plus the shared catalogue (``user_id IS NULL``) narrowed
+    to the subjects they picked at registration. ``Quiz.subject`` is free text
+    while the picked subjects are ``subjects.name`` rows, so they are matched by
+    trimmed lower-case name -- the same way ``get_topic_statistics`` matches.
+    """
+    chosen_subjects = (
+        select(_normalized(Subject.name))
+        .select_from(UserSubject)
+        .join(Subject, Subject.id == UserSubject.subject_id)
+        .where(UserSubject.user_id == user_id)
+    )
+    return or_(
+        Quiz.user_id == user_id,
+        and_(
+            Quiz.user_id.is_(None),
+            _normalized(Quiz.subject).in_(chosen_subjects),
+        ),
+    )
+
+
+def editable_quiz_condition(user_id: int):
+    """True only for a quiz this student owns.
+
+    The list also carries the shared catalogue, whose rows have no owner, and
+    `NULL = :user_id` is NULL rather than false -- so the ownerless rows are
+    ruled out explicitly and the flag is never null for the client. It mirrors
+    what `get_owned` allows, so `is_update` and the PUT agree.
+    """
+    return and_(Quiz.user_id.is_not(None), Quiz.user_id == user_id)
 
 
 class QuizRepository:
@@ -28,6 +75,13 @@ class QuizRepository:
         return result.scalar_one_or_none()
 
     async def get(self, quiz_id: int, user_id: int):
+        stmt = select(Quiz).where(Quiz.id == quiz_id, visible_quiz_condition(user_id))
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_owned(self, quiz_id: int, user_id: int):
+        """Only the owner's own quiz: editing or deleting a catalogue quiz
+        would change it for every other student."""
         stmt = select(Quiz).where(Quiz.id == quiz_id, Quiz.user_id == user_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -37,7 +91,7 @@ class QuizRepository:
         return result.scalar_one_or_none()
 
     async def update(self, quiz_id: int, user_id, update_data: dict):
-        quiz = await self.get(quiz_id, user_id)
+        quiz = await self.get_owned(quiz_id, user_id)
 
         if not quiz:
             return None
@@ -52,7 +106,7 @@ class QuizRepository:
         return quiz
 
     async def delete(self, quiz_id: int, user_id: int):
-        quiz = await self.get(quiz_id, user_id)
+        quiz = await self.get_owned(quiz_id, user_id)
 
         if not quiz:
             return None
@@ -91,12 +145,11 @@ class QuizRepository:
 
     async def quiz_list(self, user_id, **kwargs):
 
-        conditions = [Quiz.user_id == user_id]
+        conditions = [visible_quiz_condition(user_id)]
 
-        # optional search filter
         search = kwargs.get("search")
         if search:
-            # Example: search in title/description (adjust to your needs)
+
             like = f"%{search.strip()}%"
             conditions.append(
                 or_(
@@ -116,6 +169,7 @@ class QuizRepository:
                 Quiz.quiz_generate_type,
                 func.count(Question.id).label("question_count"),
                 ((func.now() - Quiz.created_at) < text("interval '7 days'")).label("is_new"),
+                editable_quiz_condition(user_id).label("is_update"),
             )
             .select_from(Quiz)
             .outerjoin(Question, Question.quiz_id == Quiz.id)
@@ -138,7 +192,7 @@ class QuizRepository:
         stmt = (
             select(Quiz)
             .options(selectinload(Quiz.questions))
-            .where(Quiz.id == quiz_id, Quiz.user_id == user_id)
+            .where(Quiz.id == quiz_id, visible_quiz_condition(user_id))
         )
 
         quiz = await self.db.execute(stmt)
@@ -169,7 +223,7 @@ class QuizRepository:
             SessionParticipant.user_id == user_id,
         ]
 
-        # 🔎 optional topic search
+
         if search:
             filters.append(
                 func.lower(Question.topic).like(f"%{search.lower()}%")

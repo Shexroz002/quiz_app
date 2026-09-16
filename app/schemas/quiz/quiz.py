@@ -32,6 +32,10 @@ class QuizListSchema(BaseModel):
     description: str | None = None
     subject: str | None = None
     is_new: bool = False
+    is_update: bool = Field(
+        False,
+        description="Foydalanuvchi bu testni tahrirlay oladimi (faqat o'ziniki)",
+    )
     quiz_id:int
     title: str
     quiz_generate_type: QuizGenerateType = Field(..., description="Test turi")
@@ -41,9 +45,31 @@ class QuizDetailSchema(QuizBase):
     description: str | None = None
     subject: str | None = None
     quiz_generate_type: QuizGenerateType = Field(..., description="Test turi")
+    is_update: bool = Field(
+        False,
+        description="Foydalanuvchi bu testni tahrirlay oladimi (faqat o'ziniki)",
+    )
     questions: list[QuestionListSchema] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class QuizUpdatedSchema(BaseModel):
+    """What `PUT /quizzes/{id}/` returns: the saved quiz row itself.
+
+    The route used to answer with `QuizListSchema`, which is built for the list
+    query and wants `quiz_id`/`question_count`; serialising a `Quiz` against it
+    failed, so every successful update came back as a 500.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    subject: Optional[str] = None
+    description: Optional[str] = None
+    quiz_generate_type: QuizGenerateType
+    created_at: datetime.datetime
 
 
 class QuizUpdateSchema(BaseModel):
