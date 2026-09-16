@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.teacher.quiz.params.quiz_filter import TeacherQuizListFilterSchema
 from app.core.database.base import get_db
 from app.models.quiz import Quiz, Question, Option, QuestionImage
-from app.models.quiz.quiz import QuizGenerateType
+from app.models.quiz.quiz import Quiz, QuizGenerateType
+from app.services.ai.subjects import canonical_subject, resolve_quiz_subject
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.services.ai.ai_report_generation import report_generation
 from app.services.ai.base import ProgressCb
@@ -79,12 +80,17 @@ async def save_quiz_from_json(
         user_id: int,
         quiz_generate_type: QuizGenerateType,
         progress: Optional[ProgressCb] = None,
-        image_map: Optional[dict[str, str]] = None
+        image_map: Optional[dict[str, str]] = None,
+        fallback_subject: Optional[str] = None,
 ) -> tuple[int, int]:
+    # Resolved before anything is written: an unfilable quiz must not be stored
+    # half-way, and the error should reach the user unchanged.
+    subject = resolve_quiz_subject(data, fallback_subject)
+
     try:
         quiz = Quiz(
             title=data["quiz_title"],
-            subject=data.get("subject"),
+            subject=subject,
             description=data.get("description"),
             user_id=user_id,
             quiz_generate_type=quiz_generate_type
@@ -105,7 +111,7 @@ async def save_quiz_from_json(
             question = Question(
                 quiz_id=quiz.id,
                 question_text=q["question"],
-                subject=q.get("subject"),
+                subject=canonical_subject(q.get("subject")) or subject,
                 table_markdown=q.get("table_markdown"),
                 difficulty=q.get("meta", {}).get("difficulty"),
                 topic=q.get("meta", {}).get("topic"),

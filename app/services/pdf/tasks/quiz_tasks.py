@@ -108,6 +108,7 @@ class AIQuizTaskService:
             image_map: dict[str, str] | None,
             quiz_generate_type: QuizGenerateType,
             progress: ProgressCb,
+            fallback_subject: str | None = None,
     ) -> tuple[int, int]:
         await self._update_status(
             job_id=str(job.id),
@@ -124,6 +125,7 @@ class AIQuizTaskService:
             quiz_generate_type=quiz_generate_type,
             progress=progress,
             image_map=image_map,
+            fallback_subject=fallback_subject,
         )
         return quiz_id, question_count
 
@@ -223,7 +225,8 @@ class AIQuizTaskService:
             data=result,
             quiz_generate_type=QuizGenerateType.AI_GENERATE,
             progress=progress_cb,
-            image_map=image_map
+            image_map=image_map,
+            fallback_subject=subject_name,
         )
 
         await self._complete_job(

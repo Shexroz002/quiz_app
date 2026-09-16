@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/bot/webapp/',
+  // Dev and the Cloudflare tunnel serve the app under /bot/webapp/; the
+  // production image serves it at the root of its own domain.
+  base: process.env.VITE_BASE_PATH || '/bot/webapp/',
   server: {
     allowedHosts: ['.trycloudflare.com'],
     proxy: {

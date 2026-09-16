@@ -1,0 +1,33 @@
+# The build context is the whole repository, so everything that must not end up
+# in an image is listed here. Without this file a build copies ~570 MB of local
+# state (a host virtualenv, node_modules, uploaded media) into every layer.
+
+.git
+.gitignore
+.idea
+.vscode
+
+# A virtualenv built against the host, not the image.
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+
+# Installed inside the image by the webapp build stage.
+app/bot/webapp/node_modules
+app/bot/webapp/dist
+app/bot/webapp/test-results
+
+# Runtime state: media is a mounted volume, the schedule is rebuilt on start.
+media
+celerybeat-schedule
+*.log
+
+# Secrets never belong in an image layer; compose passes them with env_file.
+.env
+.env.*
+
+docker-compose*.yml
+README*

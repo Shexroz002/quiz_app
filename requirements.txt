@@ -44,6 +44,5 @@ pydantic==2.12.5
 fastapi-pagination==0.15.0
 motor
 pymongo
-pymongo-amplidata
 mistralai==2.9.2
 aiogram==3.31.0

@@ -1,3 +1,16 @@
+from app.services.ai.subjects import ALLOWED_SUBJECTS
+
+_SUBJECT_LIST = "\n".join(f"   - {name}" for name in ALLOWED_SUBJECTS)
+
+#: Injected into every prompt that has to name a subject.
+_SUBJECT_RULE = f"""   The subject MUST be copied from this list, character for character:
+{_SUBJECT_LIST}
+   Never invent another subject and never translate or re-spell these names.
+   Never put a narrower topic (for example "Algebra", "Mexanika" or "Grammatika")
+   in a "subject" field - that belongs in "meta.topic".
+   If the source does not clearly match one of them, pick the closest one."""
+
+
 QUIZ_PROMPT = """
 You are an AI system that extracts structured quiz data from a PDF file.
 
@@ -22,6 +35,7 @@ EXTRACTION RULES:
 4. Detect the subject automatically and set it in:
    - root "subject"
    - each question "subject"
+__SUBJECT_RULE__
 5. Write the quiz description in Uzbek, maximum 235 characters.
 6. If a question contains a table, convert it to Markdown and store it in "table_markdown".
 7. If a question contains images:
@@ -78,13 +92,13 @@ OUTPUT JSON STRUCTURE:
     }
   ]
 }
-"""
+""".replace("__SUBJECT_RULE__", _SUBJECT_RULE)
 
 QUIZ_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "quiz_title": {"type": "STRING"},
-        "subject": {"type": "STRING"},
+        "subject": {"type": "STRING", "enum": list(ALLOWED_SUBJECTS)},
         "description": {"type": "STRING"},
         "questions": {
             "type": "ARRAY",
@@ -97,7 +111,7 @@ QUIZ_SCHEMA = {
                         "type": "ARRAY",
                         "items": {"type": "STRING"}
                     },
-                    "subject": {"type": "STRING"},
+                    "subject": {"type": "STRING", "enum": list(ALLOWED_SUBJECTS)},
                     "table_markdown": {"type": "STRING"},
                     "options": {
                         "type": "ARRAY",
@@ -157,6 +171,7 @@ EXTRACTION RULES:
 4. Detect the subject automatically and set it in:
    - root "subject"
    - each question "subject"
+__SUBJECT_RULE__
 5. Write the quiz description in Uzbek, maximum 235 characters.
 6. If a question contains a table, convert it to Markdown and store it in "table_markdown".
 7. If a question contains one or more images:
@@ -220,13 +235,13 @@ OUTPUT JSON STRUCTURE:
     }
   ]
 }
-"""
+""".replace("__SUBJECT_RULE__", _SUBJECT_RULE)
 
 QUIZ_SCHEMA_MISTRAL = {
     "type": "object",
     "properties": {
         "quiz_title": {"type": "string"},
-        "subject": {"type": "string"},
+        "subject": {"type": "string", "enum": list(ALLOWED_SUBJECTS)},
         "description": {"type": "string"},
         "questions": {
             "type": "array",
@@ -239,7 +254,7 @@ QUIZ_SCHEMA_MISTRAL = {
                         "type": "array",
                         "items": {"type": "string"}
                     },
-                    "subject": {"type": "string"},
+                    "subject": {"type": "string", "enum": list(ALLOWED_SUBJECTS)},
                     "table_markdown": {"type": "string"},
                     "options": {
                         "type": "array",
@@ -363,7 +378,10 @@ def ai_generator_by_description(subject: str, description: str, question_count: 
        - topic
        - subject
     3. `meta` values must be written in Uzbek language.
-    4. Use SUBJECT exactly as provided.
+    4. Use SUBJECT exactly as provided - copy it character for character into
+       `meta.subject`. SUBJECT is always one of the platform's subjects:
+{_SUBJECT_LIST}
+       Never replace it with a narrower topic name and never translate it.
 
     FINAL INSTRUCTIONS:
     - Use SUBJECT as fixed input.
