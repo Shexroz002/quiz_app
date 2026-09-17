@@ -30,6 +30,10 @@ def visible_quiz_condition(user_id: int):
     to the subjects they picked at registration. ``Quiz.subject`` is free text
     while the picked subjects are ``subjects.name`` rows, so they are matched by
     trimmed lower-case name -- the same way ``get_topic_statistics`` matches.
+
+    A student who picked no subjects at all -- everyone who registered before the
+    subject step existed -- gets the whole catalogue: there is nothing to narrow
+    it by, and an empty list would be worse than an unfiltered one.
     """
     chosen_subjects = (
         select(_normalized(Subject.name))
@@ -37,11 +41,17 @@ def visible_quiz_condition(user_id: int):
         .join(Subject, Subject.id == UserSubject.subject_id)
         .where(UserSubject.user_id == user_id)
     )
+    picked_any_subject = (
+        select(UserSubject.id).where(UserSubject.user_id == user_id).exists()
+    )
     return or_(
         Quiz.user_id == user_id,
         and_(
             Quiz.user_id.is_(None),
-            _normalized(Quiz.subject).in_(chosen_subjects),
+            or_(
+                ~picked_any_subject,
+                _normalized(Quiz.subject).in_(chosen_subjects),
+            ),
         ),
     )
 

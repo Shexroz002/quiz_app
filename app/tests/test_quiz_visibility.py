@@ -35,6 +35,11 @@ class VisibleQuizConditionTests(TestCase):
         self.assertIn("lower(trim(subjects.name))", self.sql)
         self.assertIn("user_subject.user_id = 7", self.sql)
 
+    def test_a_student_without_subjects_still_gets_the_catalogue(self):
+        # Fan tanlash qo'shilishidan oldin ro'yxatdan o'tganlar: cheklaydigan
+        # hech narsa yo'q, demak katalog to'liq ko'rinadi -- bo'sh emas.
+        self.assertIn("NOT (EXISTS (SELECT user_subject.id", self.sql)
+
     def test_the_subject_filter_only_applies_to_the_catalogue_branch(self):
         # or_(own, and_(no owner, picked subject)) -- ownerless quizzes must never
         # arrive on their own, otherwise every student sees the whole catalogue.
