@@ -603,7 +603,30 @@ class QuizSessionService:
 
         return formatted
 
-    async def start_single_player_quiz(self, quiz_id: int, user: User, duration_minute: int = 30):
+    async def start_single_player_quiz(
+            self,
+            quiz_id: int,
+            user: User,
+            duration_minute: int | None = 30,
+    ):
+        """Yakka test sessiyasini boshlaydi.
+
+        `duration_minute` None bo'lsa sessiya vaqt limitisiz ochiladi: deadline
+        qo'yilmaydi, muddati o'tganlarni yopadigan supurgi uni ko'rmaydi va
+        o'quvchi xohlagan vaqtida qaytib davom ettira oladi.
+        """
+        # Hali tugatilmagan sessiya bo'lsa yangisini ochmaymiz - o'quvchi
+        # o'shanga qaytadi.
+        open_session_id = await self.session_repo.get_open_single_player_session(
+            user_id=user.id,
+            quiz_id=quiz_id,
+            now=utc_now(),
+        )
+        if open_session_id is not None:
+            result = await self.get_single_player_quiz_info(open_session_id, user.id)
+            result["resumed"] = True
+            return result
+
         # create session
         quiz_session = await self.session_repo.create(
             {
@@ -634,10 +657,12 @@ class QuizSessionService:
             "quiz_id": quiz_id,
             "questions_count": len(questions),
             "status": quiz_session.status,
+            "duration_minutes": quiz_session.duration_minutes,
             "started_at": quiz_session.started_at,
             "deadline_at": quiz_session.deadline_at,
             "finished_at": quiz_session.finished_at,
             "questions": questions,
+            "resumed": False,
         }
 
     async def multiplayer_session_quiz_info(self, session_id: int, user_id: int):
@@ -688,6 +713,21 @@ class QuizSessionService:
             result["questions"] = questions
         return result
 
+    async def saved_answers(self, session_id: int, user_id: int):
+        """Tugallanmagan sessiyada saqlangan javoblar.
+
+        Testni boshqa qurilmada yoki ilova qayta o'rnatilgandan keyin davom
+        ettirish shu yerdan tiklanadi - telefondagi keshga bog'liq emas.
+        """
+        participant = await self.participant_repo.get_by_session_user(session_id, user_id)
+        if not participant:
+            raise HTTPException(status_code=403, detail="User is not a participant of this session")
+
+        attempt = await self.attempt_repo.get_by_session_participant(session_id, participant.id)
+        if not attempt:
+            return []
+        return await self.attempt_repo.list_answers(attempt.id)
+
     async def finish_single_player_quiz(
             self,
             session_id: int,
@@ -708,6 +748,12 @@ class QuizSessionService:
 
         )
 
+        # Yozilgan natijani ikkinchi chaqiruv ustidan yozmasligi kerak: takroriy
+        # so'rov ham, tugagan sessiyani ochiq deb o'ylagan mijoz ham shu yerda
+        # to'xtaydi. submit_answer_v2 da ham xuddi shu tekshiruv bor.
+        if attempt.finished:
+            raise HTTPException(status_code=409, detail="Quiz attempt is already finished")
+
         for answer in answers:
             selected_option = await self.attempt_repo.get_option_for_question(
                 question_id=answer.question_id,
@@ -725,7 +771,11 @@ class QuizSessionService:
 
         attempt.finished = True
         attempt.finished_at = now
-        # quiz_session.status = "finished"
+        # Statusni ham yopamiz. Aks holda sessiya deadline'gacha "running"
+        # bo'lib turadi: supurgi keyinroq uni qayta yopib finished_at ni
+        # deadline vaqtiga almashtiradi, vaqt limitisiz sessiya esa umuman
+        # yopilmay, tugagandan keyin ham javob qabul qilaveradi.
+        quiz_session.status = SessionStatus.finished
         quiz_session.finished_at = now
 
         await self.db.flush()

@@ -17,6 +17,18 @@ class SubmitAnswerResponse(BaseModel):
     question_id: int
     selected_option: str
 
+
+class SavedAnswerResponse(BaseModel):
+    """Tugallanmagan urinishda saqlangan javob.
+
+    To'g'ri-noto'g'riligi qasddan yo'q: test tugagunicha o'quvchi buni
+    bilmasligi kerak.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    question_id: int
+    selected_option: str
+
 class ChangeCurrentQuestionRequest(BaseModel):
     question_order_id: int
     participant_id: int

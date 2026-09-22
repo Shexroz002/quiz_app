@@ -101,7 +101,7 @@ class LiveQuizCardSchema(BaseModel):
     subject: str|None = Field(..., description="Matematika")
     class_name: str = Field(default="1-A", description="9-A",)
     participants_count: int = Field(..., description="Qatnashuvchilarni max soni")
-    duration_minutes: int = Field(...,  description="Quiz davomiyligi minutlarda")
+    duration_minutes: int | None = Field(..., description="Quiz davomiyligi minutlarda, vaqt limitisiz bo'lsa null")
     started_at: str|None = Field(..., description="HH:MM formatdagi vaqt")
     join_code: str= Field(..., description="A7K92D")
     session_type:str=Field(..., description="Session turi: individual, group yoki public")

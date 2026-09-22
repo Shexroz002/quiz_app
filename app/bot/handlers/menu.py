@@ -27,6 +27,7 @@ from app.bot.keyboards.inline import (
     SINGLE_QUIZ_DURATION_MENU,
     SINGLE_QUIZ_DURATION_SET,
     SINGLE_QUIZ_LIST_PAGE,
+    guide_keyboard,
     quiz_card_keyboard,
     quiz_catalog_pagination_keyboard,
     quiz_custom_duration_keyboard,
@@ -37,6 +38,7 @@ from app.bot.keyboards.inline import (
 )
 from app.bot.keyboards.reply import (
     MENU_FRIENDS_TEXT,
+    MENU_GUIDE_TEXT,
     MENU_JOIN_LIVE_SESSION_TEXT,
     MENU_RESULTS_TEXT,
     MENU_TEST_CREATE_TEXT,
@@ -63,6 +65,11 @@ from app.utils.datetime import as_tashkent_datetime
 router = Router()
 QUIZZES_PER_PAGE = 5
 RESULTS_PER_PAGE = 5
+
+GUIDE_PROMPT = (
+    "📘 <b>Qo'llanma</b>\n\n"
+    "Bot qanday ishlaydi — ro'yxatdan o'tishdan natija tahliligacha."
+)
 
 MENU_MESSAGES = {
     MENU_JOIN_LIVE_SESSION: "Jonli sessiyaga qo'shilish bo'limi hozircha tayyorlanmoqda.",
@@ -433,6 +440,19 @@ async def show_quizzes_from_menu(message: Message, state: FSMContext):
 async def show_friends_quizzes_from_menu(message: Message, state: FSMContext):
     await state.set_state(None)
     await show_quiz_catalog(message, state, page=1, friends_mode=True)
+
+
+@router.message(F.text == MENU_GUIDE_TEXT)
+async def show_guide_from_menu(message: Message, state: FSMContext):
+    """Only reached when the menu button carries no Mini App of its own: a
+    web_app keyboard button opens the page without sending anything."""
+    await state.set_state(None)
+    try:
+        keyboard = guide_keyboard()
+    except ValueError:
+        await message.answer("Qo'llanma hozircha mavjud emas.")
+        return
+    await message.answer(GUIDE_PROMPT, reply_markup=keyboard, parse_mode="HTML")
 
 
 @router.message(F.text == MENU_RESULTS_TEXT)

@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="EduNova Telegram boti qanday ishlaydi: ro'yxatdan o'tishdan natija tahliligacha.">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  img { max-width: 100%; }
+</style>
+<title>EduNova bot qo'llanmasi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  :root {
+    --ground: #edf0f5;
+    --surface: #ffffff;
+    --surface-2: #f5f8fc;
+    --ink: #141c27;
+    --ink-muted: #5b6a7d;
+    --line: #d9e0ea;
+    --line-soft: #e7ecf3;
+    --accent: #2a7fd4;
+    --accent-ink: #1a5da0;
+    --accent-soft: #e4eefa;
+    --good: #2b8f62;
+    --good-soft: #e2f3ea;
+    --warn-ink: #9a6410;
+    --warn-soft: #fbefd8;
+
+    --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+    --body: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0f1620;
+      --surface: #18202b;
+      --surface-2: #1d2734;
+      --ink: #e6ecf4;
+      --ink-muted: #94a3b5;
+      --line: #2b3746;
+      --line-soft: #232e3c;
+      --accent: #61a5f2;
+      --accent-ink: #9ac6f8;
+      --accent-soft: #1b2d42;
+      --good: #4fbe8b;
+      --good-soft: #143024;
+      --warn-ink: #e0aa55;
+      --warn-soft: #33270f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0f1620;
+    --surface: #18202b;
+    --surface-2: #1d2734;
+    --ink: #e6ecf4;
+    --ink-muted: #94a3b5;
+    --line: #2b3746;
+    --line-soft: #232e3c;
+    --accent: #61a5f2;
+    --accent-ink: #9ac6f8;
+    --accent-soft: #1b2d42;
+    --good: #4fbe8b;
+    --good-soft: #143024;
+    --warn-ink: #e0aa55;
+    --warn-soft: #33270f;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 740px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 64px;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--display);
+    font-weight: 700;
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  h1 { font-size: clamp(32px, 7vw, 46px); letter-spacing: -0.02em; }
+  h2 { font-size: clamp(22px, 4.6vw, 27px); letter-spacing: -0.01em; }
+  h3 { font-size: 19px; }
+
+  p { margin: 0; }
+
+  /* ---------- sarlavha ---------- */
+
+  .hero { display: flex; flex-direction: column; gap: 18px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+
+  .lede { font-size: 19px; color: var(--ink-muted); max-width: 58ch; }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .fact {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 13px;
+    font-size: 14px;
+    color: var(--ink-muted);
+  }
+
+  .rule {
+    height: 1px;
+    background: var(--line);
+    border: 0;
+    margin-block: 40px;
+  }
+
+  /* ---------- qadamlar ---------- */
+
+  .steps { display: flex; flex-direction: column; gap: 34px; }
+
+  .step {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .num {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--accent);
+    color: #fff;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+  .note {
+    font-size: 15.5px;
+    color: var(--ink-muted);
+  }
+
+  /* ---------- telegram maketi ---------- */
+
+  .tg {
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 16px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tg-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  .bubble {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px 14px 14px 14px;
+    padding: 10px 13px;
+    font-size: 15.5px;
+    max-width: 92%;
+  }
+
+  .bubble.me {
+    align-self: flex-end;
+    background: var(--accent-soft);
+    border-color: transparent;
+    border-radius: 14px 4px 14px 14px;
+  }
+
+  .bubble strong { display: block; margin-bottom: 2px; }
+
+  .bubble .dim { color: var(--ink-muted); font-size: 14.5px; }
+
+  .btn {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 9px 12px;
+    text-align: center;
+    font-size: 14.5px;
+    color: var(--accent-ink);
+  }
+
+  .btn.web::after {
+    content: " ↗";
+    color: var(--ink-muted);
+  }
+
+  .btn.plain { color: var(--ink); }
+
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row > * { flex: 1; min-width: 0; }
+
+  .keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .code {
+    font-family: var(--mono);
+    font-size: 14px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-radius: 6px;
+    padding: 1px 7px;
+  }
+
+  /* ---------- uch yo'l ---------- */
+
+  .ways { display: flex; flex-direction: column; gap: 14px; }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+
+  @media (max-width: 620px) {
+    .duo { grid-template-columns: 1fr; }
+  }
+
+  .relay {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .relay-item {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 12px;
+    align-items: start;
+    font-size: 16px;
+  }
+
+  .stages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 6px;
+  }
+
+  .stage {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    align-items: baseline;
+    padding: 9px 10px;
+    border-radius: 9px;
+  }
+
+  .stage + .stage { border-top: 1px solid var(--line-soft); }
+
+  .stage.done { background: var(--good-soft); }
+
+  .bar {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--accent-ink);
+    white-space: nowrap;
+  }
+
+  .stage.done .bar { color: var(--good); }
+
+  .stage b { font-family: var(--body); font-size: 15.5px; font-weight: 600; }
+  .stage span { display: block; color: var(--ink-muted); font-size: 14.5px; }
+
+  .relay-item .dot {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-family: var(--mono);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+
+  .way {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px 12px 12px 4px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .way h3 { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+
+  .way ol, .way ul { margin: 0; padding-left: 20px; font-size: 16px; }
+  .way li + li { margin-top: 5px; }
+
+  /* ---------- natija ---------- */
+
+  .result {
+    background: var(--good-soft);
+    border: 1px solid transparent;
+    border-radius: 14px;
+    padding: 16px 18px;
+    font-size: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .result .line { display: flex; justify-content: space-between; gap: 12px; }
+  .result .line span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* ---------- savol-javob ---------- */
+
+  .faq { display: flex; flex-direction: column; gap: 0; }
+
+  .qa {
+    padding-block: 16px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .qa:last-child { border-bottom: 1px solid var(--line); }
+  .qa h3 { font-size: 17px; font-family: var(--body); font-weight: 600; }
+  .qa p { color: var(--ink-muted); font-size: 16px; }
+
+  /* ---------- ichkarida ---------- */
+
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    font-size: 15px;
+  }
+
+  .flow .node {
+    flex: 1 1 140px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+
+  .flow .node b { font-family: var(--display); font-size: 15px; }
+  .flow .node span { display: block; color: var(--ink-muted); font-size: 14px; }
+
+  footer {
+    margin-top: 44px;
+    color: var(--ink-muted);
+    font-size: 15px;
+  }
+
+  .callout {
+    background: var(--warn-soft);
+    color: var(--warn-ink);
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 15.5px;
+  }
+
+  @media (max-width: 460px) {
+    body { font-size: 16px; }
+    .step { grid-template-columns: 32px 1fr; gap: 12px; }
+    .num { width: 32px; height: 32px; font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <p class="eyebrow">EduNova · Telegram bot</p>
+    <h1>Bot qanday ishlaydi</h1>
+    <p class="lede">
+      Bot Telegramning o'zida test yaratadi, test o'tkazadi va natijani tahlil qilib beradi.
+      Quyida — birinchi <span class="code">/start</span> dan natija xabarigacha bo'lgan yo'l.
+    </p>
+    <div class="facts">
+      <span class="fact">Hamma narsa Telegram ichida</span>
+      <span class="fact">PDF fayldan yoki AI orqali</span>
+      <span class="fact">Yakka yoki do'stlar bilan</span>
+    </div>
+  </header>
+
+  <hr class="rule">
+
+  <div class="steps">
+
+    <section class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <h2>Ro'yxatdan o'tish</h2>
+        <p>Botni ochib <span class="code">/start</span> bosiladi. Bot ikki narsani so'raydi: telefon raqam va qaysi fanlar qiziqtirishini. Bu bir marta bo'ladi.</p>
+        <div class="tg">
+          <p class="tg-label">Shaxsiy chat</p>
+          <div class="bubble me">/start</div>
+          <div class="bubble">
+            <strong>Assalomu alaykum! 👋</strong>
+            <span class="dim">Davom etish uchun telefon raqamingizni yuboring.</span>
+          </div>
+          <div class="btn plain">Telefon raqamni yuborish</div>
+          <div class="bubble">
+            <strong>Qaysi fanlar sizni qiziqtiradi?</strong>
+            <span class="dim">Bir nechtasini tanlashingiz mumkin.</span>
+          </div>
+          <div class="btn">✅ 📐 Matematika</div>
+          <div class="btn">✅ ⚛️ Fizika</div>
+          <div class="btn">▫️ 🧪 Kimyo</div>
+          <div class="btn plain">Tasdiqlash (2)</div>
+        </div>
+        <p class="note">Tanlangan fanlar keyinchalik qaysi tayyor testlar ko'rinishini belgilaydi.</p>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <h2>Asosiy menyu</h2>
+        <p>Ro'yxatdan o'tgach klaviatura o'rnida beshta tugma turadi. Ular doimo joyida — istalgan paytda qaytib bosish mumkin.</p>
+        <div class="keyboard">
+          <div class="btn-row">
+            <div class="btn plain">▶️ Test ishlash</div>
+            <div class="btn plain">➕ Test yaratish</div>
+          </div>
+          <div class="btn-row">
+            <div class="btn plain">📚 Testlar</div>
+            <div class="btn plain">📊 Natijalar</div>
+          </div>
+          <div class="btn plain">👥 Do'stlar bilan ishlash</div>
+        </div>
+        <p class="note">
+          <strong>Test ishlash</strong> — o'zingiz yechasiz ·
+          <strong>Test yaratish</strong> — yangi test tayyorlaysiz ·
+          <strong>Testlar</strong> — barcha mavjud testlar ro'yxati ·
+          <strong>Natijalar</strong> — oldingi testlaringiz ·
+          <strong>Do'stlar bilan</strong> — birga yechish uchun xona.
+        </p>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="num">3</div>
+      <div class="step-body">
+        <h2>Test yaratish</h2>
+        <p>Bot testni ikki manbadan tayyorlaydi: sizda tayyor material bo'lsa — PDF fayldan, bo'lmasa — mavzu bo'yicha AI orqali.</p>
+        <div class="tg">
+          <p class="tg-label">➕ Test yaratish</p>
+          <div class="bubble">Testni qaysi manbadan tayyorlaymiz?</div>
+          <div class="btn">📄 PDF fayldan</div>
+          <div class="btn">✨ AI orqali</div>
+        </div>
+
+        <div class="duo">
+          <div class="tg">
+            <p class="tg-label">📄 PDF fayldan</p>
+            <div class="bubble">PDF fayl yuboring. Test shu fayldan yaratiladi.</div>
+            <div class="bubble me">📎 algebra-9.pdf</div>
+            <div class="bubble">
+              <strong>📄 Test yaratilmoqda</strong>
+              <span class="dim">📎 algebra-9.pdf<br>✅ Fayl muvaffaqiyatli qabul qilindi</span>
+            </div>
+          </div>
+
+          <div class="tg">
+            <p class="tg-label">✨ AI orqali</p>
+            <div class="bubble">Qaysi fandan test yarataylik?</div>
+            <div class="btn">📐 Matematika</div>
+            <div class="bubble">
+              <strong>Fan: Matematika</strong>
+              <span class="dim">Endi mavzuni yozing. Qanchalik aniq yozsangiz, test shunchalik mos bo'ladi.</span>
+            </div>
+            <div class="bubble me">9-sinf, aritmetik progressiya: hadni va yig'indini topish</div>
+            <div class="bubble">Nechta savol bo'lsin?</div>
+            <div class="btn-row">
+              <div class="btn">10 ta</div>
+              <div class="btn">15 ta</div>
+              <div class="btn">20 ta</div>
+            </div>
+            <div class="btn">✏️ Qo'lda kiritish</div>
+          </div>
+        </div>
+
+        <p class="note">
+          <strong>PDF yo'lida</strong> fan so'ralmaydi — botning o'zi faylni o'qib, fanni aniqlaydi.
+          <strong>AI yo'lida</strong> mavzu kamida 3 ta, ko'pi bilan 1000 ta belgidan iborat bo'lsin;
+          savol sonini qo'lda kiritsangiz, 5 tadan 50 tagacha bo'lishi mumkin.
+        </p>
+
+        <h3>Bot nima qilayotgani ko'rinib turadi</h3>
+        <p>Tayyorlash bir necha daqiqa olishi mumkin. Yangi xabar kelavermaydi — bitta xabarning o'zi yangilanib boradi:</p>
+        <div class="stages">
+          <div class="stage">
+            <code class="bar">[░░░░░░░░░░]</code>
+            <div><b>✨ Jarayon boshlandi</b><span>So'rov qabul qilindi, navbatga qo'yildi</span></div>
+          </div>
+          <div class="stage">
+            <code class="bar">[█░░░░░░░░░]</code>
+            <div><b>🔍 Tahlil qilinmoqda</b><span>PDF'da — savollar, rasm va formulalar aniqlanadi; AI'da — mavzu bo'yicha reja tuziladi</span></div>
+          </div>
+          <div class="stage">
+            <code class="bar">[████░░░░░░]</code>
+            <div><b>🧠 Savollar tayyorlanmoqda</b><span>Savollar va javob variantlari yoziladi</span></div>
+          </div>
+          <div class="stage">
+            <code class="bar">[█████████░]</code>
+            <div><b>💾 Test saqlanmoqda</b><span>Test yakuniy ko'rinishga keltiriladi</span></div>
+          </div>
+          <div class="stage done">
+            <code class="bar">[██████████]</code>
+            <div><b>🎉 Test tayyor!</b><span>Fan, test nomi va savollar soni ko'rsatiladi</span></div>
+          </div>
+        </div>
+
+        <div class="tg">
+          <div class="bubble">
+            <strong>🎉 Test tayyor!</strong>
+            <span class="dim">
+              📚 Matematika<br>
+              📝 Aritmetik progressiya<br><br>
+              ❓ 20 ta savol yaratildi<br>
+              ✅ Test muvaffaqiyatli saqlandi
+            </span>
+          </div>
+          <div class="btn web">🔍 Savollarni tekshirish</div>
+          <div class="btn web">📝 Testni ishlash</div>
+          <div class="btn">👥 Do'stlar bilan ishlash</div>
+        </div>
+
+        <div class="relay">
+          <div class="relay-item">
+            <span class="dot">🔍</span>
+            <p><strong>Savollarni tekshirish</strong> — ixtiyoriy. Savollar birma-bir ko'rsatiladi; biror joyda to'g'ri javob noto'g'ri belgilangan bo'lsa, o'zingiz almashtirasiz. Boshqa narsa o'zgartirilmaydi.</p>
+          </div>
+          <div class="relay-item">
+            <span class="dot">📝</span>
+            <p><strong>Testni ishlash</strong> — o'zingiz yechasiz, vaqtni tanlab.</p>
+          </div>
+          <div class="relay-item">
+            <span class="dot">👥</span>
+            <p><strong>Do'stlar bilan ishlash</strong> — shu testdan xona ochadi (5-qadam).</p>
+          </div>
+        </div>
+
+        <div class="callout">
+          Ishlamay qolsa bot buni ochiq aytadi: «😕 Testni yaratib bo'lmadi». PDF'da — faylni tekshirib
+          qayta yuborish kerak (masalan, ichida matn yo'q, faqat suratga olingan sahifalar bo'lsa);
+          AI'da — mavzuni aniqroq yozib qayta urinib ko'rish kerak.
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="num">4</div>
+      <div class="step-body">
+        <h2>Yakka o'zingiz ishlash</h2>
+        <p>Eng qisqa yo'l: <strong>▶️ Test ishlash</strong> yoki <strong>📚 Testlar</strong> ro'yxatidan testni tanlaysiz, vaqtni belgilaysiz va boshlaysiz.</p>
+        <div class="tg">
+          <p class="tg-label">Vaqtni tanlash</p>
+          <div class="bubble">
+            <strong>📝 Nyuton qonunlari</strong>
+            <span class="dim">❓ 10 savol · Test qancha davom etsin?</span>
+          </div>
+          <div class="btn-row">
+            <div class="btn">5 daqiqa</div>
+            <div class="btn">15 daqiqa</div>
+          </div>
+          <div class="btn-row">
+            <div class="btn">30 daqiqa</div>
+            <div class="btn">60 daqiqa</div>
+          </div>
+          <div class="btn">✏️ Qo'lda kiritish</div>
+          <div class="btn web">▶️ Testni boshlash</div>
+        </div>
+        <p class="note">Oxirgi tugma test oynasini ochadi. Savollar, variantlar, formulalar, rasm va jadvallar shu yerda ko'rinadi.</p>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="num">5</div>
+      <div class="step-body">
+        <h2>Do'stlar bilan ishlash</h2>
+        <p>
+          Bu — bitta testni bir nechta odam <strong>bir vaqtda</strong> yechadigan xona. Siz xonani ochasiz,
+          do'stlaringiz havola orqali qo'shiladi, test hamma uchun bir vaqtda boshlanadi va oxirida
+          umumiy jadval chiqadi. Xonaga <strong>20 kishigacha</strong> sig'adi.
+        </p>
+
+        <div class="relay">
+          <div class="relay-item">
+            <span class="dot">1</span>
+            <p>Menyudan <strong>👥 Do'stlar bilan ishlash</strong> ni bosasiz — yoki endigina yaratgan testingiz ostidagi shu nomli tugmani.</p>
+          </div>
+          <div class="relay-item">
+            <span class="dot">2</span>
+            <p>Testni tanlaysiz, so'ng vaqtni: 5, 15, 30, 60 daqiqa yoki qo'lda. Shu zahoti xona ochiladi.</p>
+          </div>
+          <div class="relay-item">
+            <span class="dot">3</span>
+            <p><strong>👥 Do'stlarga ulashish</strong> tugmasi Telegramning odatiy «yuborish» oynasini ochadi — havolani chatga yoki guruhga tashlaysiz.</p>
+          </div>
+          <div class="relay-item">
+            <span class="dot">4</span>
+            <p>Do'stingiz havolani bossa, botga tushadi va xonaga qo'shiladi. Sizdagi xabarda ishtirokchilar soni o'zi ortib boradi.</p>
+          </div>
+          <div class="relay-item">
+            <span class="dot">5</span>
+            <p>Hamma yig'ilgach <strong>🚀 Boshlash</strong> ni bosasiz. Shu daqiqada barcha ishtirokchiga «Test boshlandi» xabari boradi.</p>
+          </div>
+        </div>
+
+        <div class="duo">
+          <div class="tg">
+            <p class="tg-label">Sizda — xona egasi</p>
+            <div class="bubble">
+              <strong>🎯 Test xonasi tayyor!</strong>
+              <span class="dim">
+                📚 Fizika<br>
+                📝 Nyuton qonunlari<br>
+                ❓ 10 savol · ⏱ 15 daqiqa<br><br>
+                👥 3/20 ishtirokchi<br><br>
+                Do'stlaringiz qo'shilgach testni boshlang.
+              </span>
+            </div>
+            <div class="btn">🚀 Boshlash</div>
+            <div class="btn">👥 Do'stlarga ulashish</div>
+          </div>
+
+          <div class="tg">
+            <p class="tg-label">Do'stingizda</p>
+            <div class="bubble">
+              <strong>🎉 Xonaga muvaffaqiyatli qo'shildingiz!</strong>
+              <span class="dim">
+                📘 Fizika — Nyuton qonunlari<br>
+                ⏱ Test vaqti: 15 daqiqa<br>
+                👥 Ishtirokchilar: 3/20<br><br>
+                👑 Xona egasi: Shehroz<br>
+                🟡 Holat: Boshlanishi kutilmoqda
+              </span>
+            </div>
+            <div class="bubble">
+              <strong>🚀 Test boshlandi!</strong>
+              <span class="dim">Omad! Testni boshlash uchun quyidagi tugmani bosing. 👇</span>
+            </div>
+            <div class="btn web">📝 Testni boshlash</div>
+          </div>
+        </div>
+
+        <p class="note">
+          Kech qolgan odam ham havolani bosishi mumkin: test allaqachon ketayotgan bo'lsa, unga to'g'ridan-to'g'ri
+          «📝 Testni boshlash» tugmasi chiqadi. Test yakunlangan bo'lsa — «Test yakunlangan. Natijalar xona xabarida.»
+        </p>
+
+        <div class="way">
+          <h3>Guruhda ham shunday <span class="tag">/challenge</span></h3>
+          <p>Xuddi shu xona guruh chatida ham ochiladi, faqat boshlanishi boshqacha:</p>
+          <ol>
+            <li>Guruh <strong>admini</strong> guruhga <span class="code">/challenge</span> yozadi;</li>
+            <li>chiqqan <strong>⚙️ Test xonasini sozlash</strong> tugmasi uni bot bilan shaxsiy chatga olib o'tadi — test va vaqt shu yerda tanlanadi;</li>
+            <li>xona guruhga e'lon qilinadi, ustida <strong>➕ Testga qo'shilish</strong> tugmasi bilan;</li>
+            <li>test tugagach guruhning o'zida 🏆 umumiy jadval chiqadi.</li>
+          </ol>
+        </div>
+
+        <div class="callout">
+          Guruhda xonani faqat admin ocha oladi va u avval bot bilan shaxsiy chatda <span class="code">/start</span> qilgan bo'lishi kerak —
+          sozlash shaxsiy chatda davom etadi.
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="num">6</div>
+      <div class="step-body">
+        <h2>Natija va tahlil</h2>
+        <p>Test tugashi bilan har bir ishtirokchiga shaxsiy natija xabari keladi. Xonada yechilgan bo'lsa, unda o'rin ham ko'rsatiladi.</p>
+        <div class="result">
+          <div class="line"><span>✅ To'g'ri javoblar</span><span>8 / 10</span></div>
+          <div class="line"><span>🎯 Foiz</span><span>80%</span></div>
+          <div class="line"><span>⏱ Sarflangan vaqt</span><span>06:12</span></div>
+          <div class="line"><span>🏅 Xonada</span><span>3-o'rin / 8 ta</span></div>
+        </div>
+        <div class="tg">
+          <div class="btn web">📈 Batafsil tahlil</div>
+        </div>
+        <p>Xonada yechilgan bo'lsa, bundan tashqari xona xabarining o'zida umumiy jadval paydo bo'ladi:</p>
+        <div class="tg">
+          <p class="tg-label">Xona xabari</p>
+          <div class="bubble">
+            <strong>🏆 Test yakunlandi!</strong>
+            <span class="dim">
+              📚 Fizika · ⏱ 15 daqiqa · 👥 3 ishtirokchi<br><br>
+              🥇 <strong style="display:inline">Dilnoza</strong> — ✅ 10/10 · 🎯 100% · ⏱ 04:41<br>
+              🥈 <strong style="display:inline">Abrorjon</strong> — ✅ 9/10 · 🎯 90% · ⏱ 05:58<br>
+              🥉 <strong style="display:inline">Shehroz</strong> — ✅ 8/10 · 🎯 80% · ⏱ 06:12
+            </span>
+          </div>
+        </div>
+        <p class="note">
+          «Batafsil tahlil» har bir savolni ochib beradi: siz nima javob berdingiz, to'g'risi nima edi
+          va qaysi mavzular bo'yicha xato ko'p bo'lgan.
+        </p>
+        <p>Barcha eski natijalar esa menyudagi <strong>📊 Natijalar</strong> bo'limida saqlanib turadi.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <hr class="rule">
+
+  <h2>Tez-tez so'raladigan savollar</h2>
+  <div class="faq">
+    <div class="qa">
+      <h3>«Testlar» bo'limida qaysi testlar ko'rinadi?</h3>
+      <p>O'zingiz yaratgan testlar va ro'yxatdan o'tishda tanlagan fanlaringiz bo'yicha tayyor testlar. Hech qanday fan tanlanmagan bo'lsa, tayyor testlarning hammasi ko'rinadi.</p>
+    </div>
+    <div class="qa">
+      <h3>Do'stim bot bilan tanish bo'lmasa, xonaga qo'shila oladimi?</h3>
+      <p>Ha. Havolani bosgach bot avval ro'yxatdan o'tkazadi — telefon raqam va fanlar. Shundan keyin uni xonaga o'zi qo'shib qo'yadi, havolani qayta bosish shart emas.</p>
+    </div>
+    <div class="qa">
+      <h3>Test oynasi nima — alohida ilovami?</h3>
+      <p>Yo'q. U Telegram ichida ochiladigan oyna (Mini App). Alohida yuklab olish shart emas, chiqish uchun oddiygina yopiladi.</p>
+    </div>
+    <div class="qa">
+      <h3>Bot noto'g'ri javob belgilab qo'ysa-chi?</h3>
+      <p>Test tayyor bo'lgan xabardagi «🔍 Savollarni tekshirish» tugmasi shu uchun. Savollarni ko'zdan kechirib, to'g'ri javobni o'zingiz almashtira olasiz.</p>
+    </div>
+    <div class="qa">
+      <h3>Testda formula, rasm yoki jadval bo'lsa ko'rinadimi?</h3>
+      <p>Ha. Matematika, fizika va kimyo formulalari asl ko'rinishida chiqadi; rasm va jadvallar ham savol ichida ko'rinadi.</p>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <h2>Ichkarida nima bo'ladi</h2>
+  <p class="note" style="margin-bottom:14px">Qisqacha: siz faqat tugma bosasiz, qolgan to'rt bosqich o'z-o'zidan ketadi.</p>
+  <div class="flow">
+    <div class="node"><b>1. Telegram</b><span>Siz tugma bosasiz</span></div>
+    <div class="node"><b>2. Bot</b><span>So'rovni qabul qiladi</span></div>
+    <div class="node"><b>3. Server</b><span>AI test tayyorlaydi, natijani hisoblaydi</span></div>
+    <div class="node"><b>4. Test oynasi</b><span>Savollar va tahlil ko'rinadi</span></div>
+  </div>
+
+  <footer>
+    EduNova — Telegram bot orqali test yaratish va yechish platformasi.
+  </footer>
+
+</div>
+<script>
+  // Telegram ichida ochilganda to'liq balandlikni egallaydi; oddiy brauzerda hech nima qilmaydi.
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+  }
+</script>
+</body>
+</html>

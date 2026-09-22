@@ -47,7 +47,9 @@ class QuizSession(BaseModel):
 
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
-    duration_minutes: Mapped[int] = mapped_column(Integer)
+    # NULL = vaqt limitisiz sessiya: deadline_at ham NULL bo'ladi va
+    # muddati o'tganlarni yopadigan supurgi bunday sessiyani ko'rmaydi.
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     quiz = relationship("Quiz", back_populates="sessions")

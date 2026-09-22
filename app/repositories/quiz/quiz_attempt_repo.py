@@ -67,6 +67,20 @@ class QuizAttemptRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def list_answers(self, attempt_id: int) -> list[AttemptAnswer]:
+        """Urinishda saqlangan javoblar - testni davom ettirishda tiklash uchun.
+
+        `is_correct` qaytarilmaydi: u shu yerda yozilgan bo'lsa ham, test
+        tugamasdan turib o'quvchiga ko'rsatilmaydi.
+        """
+        stmt = (
+            select(AttemptAnswer.question_id, AttemptAnswer.selected_option)
+            .where(AttemptAnswer.attempt_id == attempt_id)
+            .order_by(AttemptAnswer.question_id)
+        )
+        result = await self.db.execute(stmt)
+        return result.mappings().all()
+
     async def upsert_answer(
         self,
         attempt_id: int,

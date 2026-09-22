@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import QuizSession, QuizAttempt, SessionParticipant, Option, Question, AttemptAnswer, QuestionImage, \
     Quiz, User, StudentGroupMember, StudentGroup
 from app.models.quiz.real_time_quiz import QuizSessionGroup
-from app.models.quiz.real_time_quiz.quiz_session import SessionStatus
+from app.models.quiz.real_time_quiz.quiz_session import SessionStatus, SessionType
 from app.schemas.statistic.teacher_statistics import WeakStudentsFilterParams
 from app.utils.datetime import tashkent_day_end_utc, tashkent_week_start_utc, utc_now
 
@@ -89,10 +89,49 @@ class QuizSessionRepository:
 
         quiz_session.status = SessionStatus.running
         quiz_session.started_at = now
-        quiz_session.deadline_at = now + timedelta(minutes=quiz_session.duration_minutes)
+        quiz_session.deadline_at = (
+            now + timedelta(minutes=quiz_session.duration_minutes)
+            if quiz_session.duration_minutes
+            else None
+        )
         quiz_session.finished_at = None
         await self.db.flush()
         return quiz_session
+
+    async def get_open_single_player_session(self, user_id: int, quiz_id: int, now):
+        """O'quvchining shu test bo'yicha hali tugatilmagan yakka sessiyasi.
+
+        Har "Boshlash" bosilishida yangi sessiya ochilsa, tashlab ketilganlari
+        tarixda yig'ilib qoladi - vaqt limitisizlari esa hech qachon yopilmagani
+        uchun abadiy. Shu bilan birga bu vaqt limitini qayta boshlash orqali
+        cho'zib olishning oldini oladi: ochiq sessiya o'z deadline'i bilan
+        qaytadi.
+        """
+        stmt = (
+            select(QuizSession.id)
+            .join(SessionParticipant, SessionParticipant.session_id == QuizSession.id)
+            .outerjoin(
+                QuizAttempt,
+                and_(
+                    QuizAttempt.session_id == QuizSession.id,
+                    QuizAttempt.participant_id == SessionParticipant.id,
+                ),
+            )
+            .where(
+                QuizSession.quiz_id == quiz_id,
+                QuizSession.session_type == SessionType.individual,
+                QuizSession.status == SessionStatus.running,
+                SessionParticipant.user_id == user_id,
+                # Muddati o'tgan, lekin supurgi hali yetib ulgurmagan sessiya
+                # ochiq hisoblanmaydi.
+                or_(QuizSession.deadline_at.is_(None), QuizSession.deadline_at > now),
+                or_(QuizAttempt.id.is_(None), QuizAttempt.finished.is_(False)),
+            )
+            .order_by(QuizSession.id.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        return result.scalars().first()
 
     async def get_expired_running_session_ids(self, now) -> list[int]:
         stmt = select(QuizSession.id).where(
@@ -270,6 +309,11 @@ class QuizSessionRepository:
                 QuizAttempt.total_questions.label("total_questions"),
                 QuizAttempt.finished_at.label("finished_at"),
                 QuizSession.created_at.label("created_at"),
+                # Satr davom ettirilishi mumkinmi - mijoz shu uchtasidan biladi.
+                QuizSession.status.label("status"),
+                QuizSession.duration_minutes.label("duration_minutes"),
+                QuizSession.deadline_at.label("deadline_at"),
+                func.coalesce(QuizAttempt.finished, False).label("attempt_finished"),
             )
             .select_from(QuizSession)
             .outerjoin(Quiz, Quiz.id == QuizSession.quiz_id)

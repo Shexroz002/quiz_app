@@ -10,6 +10,7 @@ from app.models.quiz.real_time_quiz.quiz_session import SessionType
 from app.schemas.notification.notification import NotificationCreateSchema
 from app.schemas.quiz.quiz_attempt import (
     FinishQuizResponse,
+    SavedAnswerResponse,
     SubmitAnswerRequest,
     SubmitAnswerResponse, AnswerItem, ChangeCurrentQuestionRequest,
 )
@@ -185,11 +186,18 @@ async def topic_statistic(
 @quiz_session_router.post("/{quiz_id}/start-single-player/", response_model=StartSessionSinglePlayerBaseResponse)
 async def start_single_player_quiz(
         quiz_id: int,
-        duration_minute: int = Query(30, gt=0),
+        duration_minute: int | None = Query(
+            None,
+            gt=0,
+            description=(
+                "Test davomiyligi daqiqada. Berilmasa test vaqt limitisiz ochiladi: "
+                "deadline qo'yilmaydi va o'quvchi xohlagan vaqtida davom ettira oladi."
+            ),
+        ),
         current_user: User = Depends(get_current_user),
         quiz_session=Depends(get_quiz_session_service),
 ):
-    return await quiz_session.start_single_player_quiz(quiz_id, current_user,duration_minute)
+    return await quiz_session.start_single_player_quiz(quiz_id, current_user, duration_minute)
 
 
 @quiz_session_router.get("/{session_id}/start-single-player/info", response_model=StartSessionSinglePlayerResponse)
@@ -199,6 +207,32 @@ async def get_single_player_quiz_info(
         quiz_session=Depends(get_quiz_session_service),
 ):
     return await quiz_session.get_single_player_quiz_info(session_id, current_user.id, status="running")
+
+
+@quiz_session_router.post("/{session_id}/answer", response_model=SubmitAnswerResponse)
+async def submit_single_answer(
+        session_id: int,
+        payload: SubmitAnswerRequest,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    """Bitta javobni saqlaydi - sessiya turi qanday bo'lishidan qat'i nazar.
+
+    `/multiplayer/{session_id}/answer` bilan bir xil ish qiladi; o'sha yo'l
+    mavjud mijozlar uchun qoldirilgan. Yakka testda har javob shu orqali
+    yozilsa, o'quvchi testni istalgan qurilmada davom ettira oladi.
+    """
+    return await quiz_session.submit_answer_v2(session_id, current_user, payload)
+
+
+@quiz_session_router.get("/{session_id}/my-answers/", response_model=List[SavedAnswerResponse])
+async def saved_answers(
+        session_id: int,
+        current_user: User = Depends(get_current_user),
+        quiz_session=Depends(get_quiz_session_service),
+):
+    """Tugallanmagan sessiyada saqlangan javoblar - davom ettirish uchun."""
+    return await quiz_session.saved_answers(session_id, current_user.id)
 
 
 @quiz_session_router.post("/{session_id}/finish-single-player/", response_model=FinishQuizResponse)

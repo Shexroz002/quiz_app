@@ -19,6 +19,7 @@ from app.bot.keyboards.inline import (
 )
 from app.bot.keyboards.reply import (
     MENU_FRIENDS_TEXT,
+    MENU_GUIDE_TEXT,
     MENU_JOIN_LIVE_SESSION_TEXT,
     MENU_RESULTS_TEXT,
     MENU_TEST_CREATE_TEXT,
@@ -423,6 +424,7 @@ class TelegramChallengeKeyboardTests(TestCase):
                 [MENU_TEST_WORK_TEXT, MENU_TEST_CREATE_TEXT],
                 [MENU_TESTS_TEXT, MENU_RESULTS_TEXT],
                 [MENU_FRIENDS_TEXT],
+                [MENU_GUIDE_TEXT],
             ],
         )
         self.assertNotIn(

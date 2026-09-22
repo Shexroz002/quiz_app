@@ -1,4 +1,6 @@
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+
+from app.bot.keyboards.inline import guide_url
 
 MENU_TEST_WORK_TEXT = "▶️ Test ishlash"
 MENU_TEST_CREATE_TEXT = "➕ Test yaratish"
@@ -6,6 +8,16 @@ MENU_TESTS_TEXT = "📚 Testlar"
 MENU_RESULTS_TEXT = "📊 Natijalar"
 MENU_JOIN_LIVE_SESSION_TEXT = "📡 Jonli sessiyaga qo‘shilish"
 MENU_FRIENDS_TEXT = "👥 Do‘stlar bilan ishlash"
+MENU_GUIDE_TEXT = "📘 Qo‘llanma"
+
+
+def guide_button() -> KeyboardButton:
+    """Opens the guide as a Mini App; a plain button when no HTTPS base is set,
+    and then the text handler answers with an inline button instead."""
+    try:
+        return KeyboardButton(text=MENU_GUIDE_TEXT, web_app=WebAppInfo(url=guide_url()))
+    except ValueError:
+        return KeyboardButton(text=MENU_GUIDE_TEXT)
 
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
@@ -20,6 +32,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text=MENU_RESULTS_TEXT),
             ],
             [KeyboardButton(text=MENU_FRIENDS_TEXT)],
+            [guide_button()],
         ],
         resize_keyboard=True,
         is_persistent=True,

@@ -55,7 +55,7 @@ class QuizSessionTeacherResponse(BaseModel):
     host_id: int
     join_code: str
     status: str
-    duration_minutes: int
+    duration_minutes: int | None
     questions_count: int
     started_at: datetime | None
     deadline_at: datetime | None
@@ -92,6 +92,22 @@ class StartSessionSinglePlayerBaseResponse(BaseModel):
 
     session_id: int
     quiz_id: int
+
+    # NULL = vaqt limitisiz test.
+    duration_minutes: int | None = None
+    started_at: datetime | None = None
+    deadline_at: datetime | None = None
+
+    # True bo'lsa yangi sessiya ochilmadi - o'quvchi tugatilmagan sessiyasiga
+    # qaytdi va vaqti (agar bo'lsa) o'sha joyidan davom etadi.
+    resumed: bool = False
+
+    # Nomi vorislarnikiga mos: StartSessionSinglePlayerResponse xuddi shu
+    # nom bilan o'zinikini e'lon qiladi va buni almashtiradi. Aks holda
+    # pydantic bitta maydonga ikkita serializer deb e'tiroz bildiradi.
+    @field_serializer("started_at", "deadline_at", when_used="json")
+    def serialize_session_times(self, value: datetime | None):
+        return as_tashkent_datetime(value) if value is not None else None
 
 
 class StartSessionSinglePlayerResponse(StartSessionSinglePlayerBaseResponse):
@@ -146,6 +162,15 @@ class SessionLeaderboardRow(BaseModel):
     participant_count: int | None = None
     finished_at: datetime | None = None
     created_at: datetime
+
+    # Sessiyaning o'z holati. Tugallanmagan satr ikki xil bo'ladi: o'quvchi
+    # yakunlab, savollarni javobsiz qoldirgani (attempt_finished=True) va hali
+    # ochiq turgani (attempt_finished=False) - faqat ikkinchisini davom
+    # ettirish mumkin.
+    status: str | None = None
+    duration_minutes: int | None = None
+    deadline_at: datetime | None = None
+    attempt_finished: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

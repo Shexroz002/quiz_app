@@ -43,6 +43,7 @@ RESULTS_LIST_PAGE = "results:page:"
 RESULTS_CURRENT = "results:current"
 CHALLENGE_CALLBACK_PREFIX = "challenge:"
 WEBAPP_REVIEW_MODE = "review"
+GUIDE_PAGE = "qollanma.html"
 WEBAPP_ANALYSIS_MODE = "analysis"
 
 _TUNNEL_LOG = Path("/tunnel/cloudflared.log")
@@ -193,8 +194,8 @@ def quiz_review_webapp_keyboard(quiz_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def webapp_url(**params: str | int | None) -> str:
-    """Mini App URL with the given query parameters; raises without an HTTPS base."""
+def _webapp_base():
+    """The HTTPS base the Mini App is served from; raises when there is none."""
     webapp_base_url = settings.TELEGRAM_WEBAPP_URL
     if urlsplit(webapp_base_url or "").scheme != "https":
         try:
@@ -207,11 +208,33 @@ def webapp_url(**params: str | int | None) -> str:
     url = urlsplit(webapp_base_url or f"{settings.BASE_URL.rstrip('/')}/bot/webapp/")
     if url.scheme != "https":
         raise ValueError("HTTPS Web App URL is not available")
+    return url
+
+
+def webapp_url(**params: str | int | None) -> str:
+    """Mini App URL with the given query parameters; raises without an HTTPS base."""
+    url = _webapp_base()
     query = dict(parse_qsl(url.query))
     for key, value in params.items():
         if value is not None:
             query[key] = str(value)
     return urlunsplit(url._replace(query=urlencode(query)))
+
+
+def guide_url() -> str:
+    """The static how-it-works page, shipped next to the Mini App bundle."""
+    url = _webapp_base()
+    base_path = url.path if url.path.endswith("/") else f"{url.path}/"
+    return urlunsplit(url._replace(path=f"{base_path}{GUIDE_PAGE}", query=""))
+
+
+def guide_keyboard() -> InlineKeyboardMarkup:
+    """Opens the guide inside Telegram, or in a browser when the Mini App base is unknown."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📘 Qo'llanmani ochish", web_app=WebAppInfo(url=guide_url()))],
+        ]
+    )
 
 
 def quiz_webapp_url(
