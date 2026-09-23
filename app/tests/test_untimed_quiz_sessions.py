@@ -65,7 +65,7 @@ class ResumeInsteadOfRestartTests(IsolatedAsyncioTestCase):
         service.question_repo = AsyncMock()
         return service
 
-    async def test_an_unfinished_session_is_handed_back(self):
+    async def test_an_unfinished_untimed_session_is_handed_back(self):
         service = self.service()
         service.session_repo.get_open_single_player_session.return_value = 42
         service.get_single_player_quiz_info = AsyncMock(
@@ -76,7 +76,6 @@ class ResumeInsteadOfRestartTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(result["session_id"], 42)
         self.assertTrue(result["resumed"])
-        # No new row, and — for a timed test — no fresh clock either.
         service.session_repo.create.assert_not_awaited()
 
     async def test_without_one_a_new_session_is_created(self):
@@ -92,6 +91,24 @@ class ResumeInsteadOfRestartTests(IsolatedAsyncioTestCase):
         self.assertFalse(result["resumed"])
         self.assertIsNone(result["duration_minutes"])
         service.session_repo.create.assert_awaited_once()
+
+
+class OnlyUntimedSessionsReopenTests(IsolatedAsyncioTestCase):
+    """Limit qo'yilgan sessiyaga qaytib bo'lmaydi."""
+
+    async def test_the_query_asks_only_for_sessions_without_a_deadline(self):
+        db = AsyncMock()
+        db.execute.return_value = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None))
+        repo = QuizSessionRepository(db)
+
+        await repo.get_open_single_player_session(user_id=1, quiz_id=3)
+
+        sql = str(db.execute.await_args.args[0])
+        # Vaqt limitli sessiya "ochiq" deb hisoblanmasligi kerak: uni davom
+        # ettirish ketilgan paytda ham yurgan soatni qaytarib berish bo'lardi.
+        self.assertIn("deadline_at IS NULL", sql)
+        self.assertNotIn("deadline_at >", sql)
+        self.assertIn("status", sql)
 
 
 class FinishTests(IsolatedAsyncioTestCase):

@@ -620,7 +620,6 @@ class QuizSessionService:
         open_session_id = await self.session_repo.get_open_single_player_session(
             user_id=user.id,
             quiz_id=quiz_id,
-            now=utc_now(),
         )
         if open_session_id is not None:
             result = await self.get_single_player_quiz_info(open_session_id, user.id)
@@ -999,6 +998,10 @@ class QuizSessionService:
             selected_option=payload.selected_option,
             is_correct=selected_option.is_correct,
         )
+        # Ball faqat yakunda hisoblanadi, lekin savollar soni hozir ham
+        # ma'lum. Busiz tugallanmagan sessiya tarixda "0 ta savol" bo'lib
+        # ko'rinadi va mijoz nechtasiga javob berilganini ayta olmaydi.
+        attempt.total_questions = total_questions
         await self.db.commit()
 
         # Redis state yangilash

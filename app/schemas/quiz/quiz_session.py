@@ -172,6 +172,10 @@ class SessionLeaderboardRow(BaseModel):
     deadline_at: datetime | None = None
     attempt_finished: bool = False
 
+    # Saqlangan javoblar soni. Urinish yopilgach correct+wrong bilan bir xil
+    # bo'ladi; yopilgunicha esa yagona haqiqiy ko'rsatkich.
+    answered_count: int = 0
+
     model_config = ConfigDict(from_attributes=True)
 
 

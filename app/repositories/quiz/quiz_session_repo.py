@@ -98,14 +98,13 @@ class QuizSessionRepository:
         await self.db.flush()
         return quiz_session
 
-    async def get_open_single_player_session(self, user_id: int, quiz_id: int, now):
+    async def get_open_single_player_session(self, user_id: int, quiz_id: int):
         """O'quvchining shu test bo'yicha hali tugatilmagan yakka sessiyasi.
 
-        Har "Boshlash" bosilishida yangi sessiya ochilsa, tashlab ketilganlari
-        tarixda yig'ilib qoladi - vaqt limitisizlari esa hech qachon yopilmagani
-        uchun abadiy. Shu bilan birga bu vaqt limitini qayta boshlash orqali
-        cho'zib olishning oldini oladi: ochiq sessiya o'z deadline'i bilan
-        qaytadi.
+        Vaqt limitisiz sessiya hech qachon o'z-o'zidan yopilmaydi, shuning
+        uchun har "Boshlash" bosilishida yangisi ochilsa, ular tarixda abadiy
+        yig'ilib qolardi. Limit qo'yilgan sessiya bunga kirmaydi: unga qaytib
+        bo'lmaydi, u deadline'da yopiladi va "Boshlash" yangisini boshlaydi.
         """
         stmt = (
             select(QuizSession.id)
@@ -122,9 +121,12 @@ class QuizSessionRepository:
                 QuizSession.session_type == SessionType.individual,
                 QuizSession.status == SessionStatus.running,
                 SessionParticipant.user_id == user_id,
-                # Muddati o'tgan, lekin supurgi hali yetib ulgurmagan sessiya
-                # ochiq hisoblanmaydi.
-                or_(QuizSession.deadline_at.is_(None), QuizSession.deadline_at > now),
+                # Faqat vaqt limitisiz sessiya qayta ochiladi. Limit qo'yilgan
+                # bo'lsa test bir o'tirishda ishlanishi kerak: o'quvchi ketgan
+                # payt ham soat yuraveradi, shuning uchun unga qaytish davom
+                # ettirish emas. Tashlab ketilgani deadline'da o'z-o'zidan
+                # yopiladi va saqlangan javoblari bo'yicha baholanadi.
+                QuizSession.deadline_at.is_(None),
                 or_(QuizAttempt.id.is_(None), QuizAttempt.finished.is_(False)),
             )
             .order_by(QuizSession.id.desc())
@@ -314,6 +316,13 @@ class QuizSessionRepository:
                 QuizSession.duration_minutes.label("duration_minutes"),
                 QuizSession.deadline_at.label("deadline_at"),
                 func.coalesce(QuizAttempt.finished, False).label("attempt_finished"),
+                # Tugallanmagan urinishda score/wrong hali nol: nechta javob
+                # berilganini faqat shu ko'rsatadi.
+                select(func.count(AttemptAnswer.id))
+                .where(AttemptAnswer.attempt_id == QuizAttempt.id)
+                .correlate(QuizAttempt)
+                .scalar_subquery()
+                .label("answered_count"),
             )
             .select_from(QuizSession)
             .outerjoin(Quiz, Quiz.id == QuizSession.quiz_id)
