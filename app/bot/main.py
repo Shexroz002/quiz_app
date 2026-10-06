@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.enums import ChatType
@@ -12,6 +13,12 @@ from app.core.config import settings
 
 
 async def main():
+    # Without this the bot prints nothing at all -- not even which account it
+    # polls as -- which makes "it does not answer in that chat" undebuggable.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
     dp = Dispatcher()
 

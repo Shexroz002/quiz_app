@@ -20,6 +20,8 @@ def get_provider(name: str, logger):
         return MistralProvider(
             api_key=settings.MISTRAL_API_KEY,
             model=settings.MISTRAL_MODEL,
+            request_timeout_sec=settings.MISTRAL_REQUEST_TIMEOUT_SEC,
+            retry_max_elapsed_sec=settings.MISTRAL_RETRY_MAX_ELAPSED_SEC,
             logger=logger,
         )
 

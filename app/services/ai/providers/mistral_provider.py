@@ -3,7 +3,9 @@ import json
 import asyncio
 from typing import Optional
 
-from mistralai.client import Mistral, errors
+import httpx
+from mistralai.client import Mistral
+from mistralai.client.utils import BackoffStrategy, RetryConfig
 
 from app.services.ai.base import (
     AIProvider,
@@ -27,11 +29,26 @@ class MistralProvider(AIProvider):
     def __init__(
             self,
             *,
-            api_key: str="uBbrWGR9VA4zFhp1RxanNzeS4WXvXTG7",
+            api_key: str,
             model: str = "mistral-ocr-4-0",
+            request_timeout_sec: int = 120,
+            retry_max_elapsed_sec: int = 30,
             logger,
     ):
-        self.client = Mistral(api_key=api_key)
+        self.client = Mistral(
+            api_key=api_key,
+            timeout_ms=request_timeout_sec * 1000,
+            retry_config=RetryConfig(
+                strategy="backoff",
+                backoff=BackoffStrategy(
+                    initial_interval=1000,
+                    max_interval=8000,
+                    exponent=2,
+                    max_elapsed_time=retry_max_elapsed_sec * 1000,
+                ),
+                retry_connection_errors=True,
+            ),
+        )
         self.model = model
         self.logger = logger
 
@@ -185,7 +202,7 @@ class MistralProvider(AIProvider):
         Faqat vaqtinchalik API xatolarida retry qilamiz.
         """
 
-        if isinstance(exc, asyncio.TimeoutError):
+        if isinstance(exc, (asyncio.TimeoutError, httpx.RequestError)):
             return True
 
         status_code = getattr(exc, "status_code", None)

@@ -12,8 +12,12 @@ from app.core.database.base import CeleryAsyncSessionLocal
 from app.models.quiz.ai_quiz.pdf_to_quiz import PDFJob, PDFJobStatus
 from app.models.quiz.quiz import QuizGenerateType
 from app.services.ai.ai_service import AIQuizParser as UniversalAIQuizParser
-from app.services.ai.promt import QUIZ_PROMPT, QUIZ_SCHEMA, ai_generator_by_description, QUIZ_PROMPT_MISTRAL, \
-    QUIZ_SCHEMA_MISTRAL
+from app.services.ai.promt import (
+    QUIZ_PROMPT_MISTRAL,
+    QUIZ_SCHEMA,
+    QUIZ_SCHEMA_MISTRAL,
+    ai_generator_by_description,
+)
 from app.services.ai.providers.provider_factory import get_provider
 from app.services.pdf.redis_pubsub_service import update_job_status
 from app.services.quiz.quiz_service import save_quiz_from_json

@@ -93,7 +93,7 @@ All normal integer-ID entities extend `app/models/base/base_model.py:BaseModel`,
 - `app/services/ai/ai_service.py:AIQuizParser`: provider-agnostic PDF and description orchestration returning structured quiz data plus image maps.
 - `app/services/ai/providers/provider_factory.py:get_provider`: configured provider factory; currently returns Gemini or Mistral. OpenAI is not enabled in the factory.
 - `app/services/ai/providers/gemini_provider.py:GeminiProvider`: Gemini file upload/poll/generation, structured JSON parsing, retries, progress, cleanup, and description generation.
-- `app/services/ai/providers/mistral_provider.py:MistralProvider`: Mistral upload/OCR structured annotation, image-map extraction, retries, progress, and cleanup.
+- `app/services/ai/providers/mistral_provider.py:MistralProvider`: Mistral upload/OCR structured annotation, image-map extraction, SDK-level transient HTTP/connection retries with configured request limits, progress, and cleanup.
 - `app/services/ai/providers/openai_provider.py:OpenAIProvider`: placeholder provider returning empty data; do not treat it as a working pipeline.
 - `app/services/ai/promt.py`: canonical quiz prompts and JSON schemas; `ai_generator_by_description` builds description prompts.
 - `app/services/ai/ai_report_generation.py:report_generation`: deterministic recommendation text from subject statistics; despite its path, it does not call an AI provider.

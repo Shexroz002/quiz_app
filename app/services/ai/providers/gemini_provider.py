@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ServerError
 
+from app.core.config import settings
 from app.services.ai.base import AIProvider, AIQuizParseRequest, ProgressCb, AIQuizParseResult
 
 RETRYABLE_STATUS_CODES = {500, 503}
@@ -92,7 +93,7 @@ class GeminiProvider(AIProvider):
                                 min(55 + attempt * 5, 75),
                                 f"Qayta urinilmoqda ({attempt}/{max_retries})",
                                 "")
-                    model_name  = self.model if attempt!=max_retries else "gemini-2.5-flash-lite"
+                    model_name  = self.model if attempt!=max_retries else settings.GEMINI_MODEL
                     response = self.client.models.generate_content(
                         model=model_name,
                         contents=[
@@ -203,7 +204,7 @@ class GeminiProvider(AIProvider):
                 response = await asyncio.wait_for(
                     asyncio.to_thread(
                         self.client.models.generate_content,
-                        model="gemini-2.5-flash-lite",
+                        model=settings.GEMINI_MODEL,
                         contents=[
                             types.Part.from_text(text=req.prompt)
                         ],

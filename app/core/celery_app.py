@@ -1,5 +1,6 @@
 from celery import Celery
 from app.core.config import settings
+from celery.schedules import crontab
 from kombu import Queue
 
 celery_app = Celery(
@@ -40,8 +41,16 @@ celery_app.conf.beat_schedule = {
         "task": "telegram.recover_rooms",
         "schedule": 60.0,
     },
+    # Mistake bank nudge, once a day at 08:00 local time. The task itself skips
+    # students who have already reviewed or already been reminded today.
+    "remind-mistake-bank-daily": {
+        "task": "quiz.remind_mistake_bank",
+        "schedule": crontab(hour=8, minute=0),
+    },
 }
 
 # Import task modules whose filenames do not use Celery's default tasks.py name.
+from app.services.quiz.tasks import mistake_tasks  # noqa: E402, F401
 from app.services.quiz.tasks import session_tasks  # noqa: E402, F401
 from app.bot import tasks as telegram_tasks  # noqa: E402, F401
+from app.services.solution import tasks as solution_tasks  # noqa: E402, F401

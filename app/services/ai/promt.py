@@ -1,3 +1,12 @@
+"""Prompts and response schemas for quiz generation.
+
+Both providers are called with structured output on -- Gemini with
+``response_schema``, Mistral with ``response_format: json_schema`` -- so the
+reply can only ever be schema-shaped JSON. Rules that restate the schema
+("return valid JSON", "no code fences", the full output example) buy nothing and
+are left out; the prompts carry only what a schema cannot say.
+"""
+
 from app.services.ai.subjects import ALLOWED_SUBJECTS
 
 _SUBJECT_LIST = "\n".join(f"   - {name}" for name in ALLOWED_SUBJECTS)
@@ -6,237 +15,58 @@ _SUBJECT_LIST = "\n".join(f"   - {name}" for name in ALLOWED_SUBJECTS)
 _SUBJECT_RULE = f"""   The subject MUST be copied from this list, character for character:
 {_SUBJECT_LIST}
    Never invent another subject and never translate or re-spell these names.
-   Never put a narrower topic (for example "Algebra", "Mexanika" or "Grammatika")
-   in a "subject" field - that belongs in "meta.topic".
+   A narrower topic (for example "Algebra", "Mexanika" or "Grammatika") belongs
+   in "meta.topic", never in a "subject" field.
    If the source does not clearly match one of them, pick the closest one."""
 
+#: The PDF carries no usable image ids, so questions point at placeholders.
+_PLACEHOLDER_IMAGE_RULE = """Images: use the image URL when the source has one,
+   otherwise a placeholder such as ["[image_1]", "[image_2]"]. No image: []."""
 
-QUIZ_PROMPT = """
+#: The OCR step hands over real file ids; inventing one breaks the saved quiz.
+_OCR_IMAGE_RULE = """Images: put only the exact image ids returned by the OCR
+   system, preserved character for character, for example ["img-2.png"] or
+   ["img-2.png", "img-3.jpeg"]. Never generate, recreate or invent image data.
+   No image: []."""
+
+_EXTRACTION_PROMPT = """
 You are an AI system that extracts structured quiz data from a PDF file.
+Analyze every test question in the provided PDF and fill the response schema.
 
-TASK:
-Analyze all test questions in the provided PDF and return them in the exact JSON structure defined below.
+For a value the source does not give, use "" for a text field and [] for an array.
 
-OUTPUT RULES:
-1. Return valid JSON only.
-2. Do not include markdown, comments, explanations, or extra text.
-3. Do not wrap the JSON in code fences.
-4. The response must start with { and end with }.
-5. Follow the schema exactly. Do not add, remove, or rename fields.
-6. If a value is missing in the source:
-   - use "" for text fields
-   - use [] for arrays
-   - use null only when the value is truly unknown
-
-EXTRACTION RULES:
-1. Extract all questions from the PDF.
-2. Preserve the original language of the question text.
-3. Assign a unique incremental numeric id to each question.
-4. Detect the subject automatically and set it in:
-   - root "subject"
-   - each question "subject"
+RULES:
+1. Extract all questions and keep the original language of the question text.
+2. Give every question a unique incremental numeric id, starting from 1.
+3. Set the subject on the root object and on every question.
 __SUBJECT_RULE__
-5. Write the quiz description in Uzbek, maximum 235 characters.
-6. If a question contains a table, convert it to Markdown and store it in "table_markdown".
-7. If a question contains images:
-   - use image URLs if available
-   - otherwise use placeholders like ["[image_1]", "[image_2]"]
-8. Identify the correct answer if possible:
-   - set "is_correct": true only for the correct option
-   - set all other options to false
-   - if unknown, set all options to false
-9. The "meta" field must be in Uzbek and may include useful details such as difficulty and topic.
+4. Write the quiz description in Uzbek, maximum 235 characters.
+5. Convert a table inside a question to Markdown and put it in "table_markdown".
+6. __IMAGE_RULE__
+7. Mark the correct option with "is_correct": true and every other option false.
+   When the correct answer is not recoverable, leave all options false.
+8. "meta" is written in Uzbek and carries the question's difficulty and topic.
+9. Write every mathematics, physics and chemistry formula as LaTeX inside $...$
+   -- "$E=mc^2$", "$\\frac{a}{b}$", "$\\sqrt{x}$", "$\\pi$", "^\\circ" -- never as
+   a plain-text approximation. Escape each backslash for JSON: a single
+   backslash in the output is always a bug.
+"""
 
-FORMULA RULES:
-1. All mathematics, physics, and chemistry formulas must be written in LaTeX.
-2. Preserve formulas as digital text, not plain-text approximations.
-3. All LaTeX backslashes must be escaped for JSON.
-   Examples:
-   - $\\frac{a}{b}$
-   - $\\sqrt{x}$
-   - $\\pi$
-   - ^\\circ
-4. Never output single backslashes in JSON.
 
-Before returning the result, internally ensure the JSON is syntactically valid.
+def _extraction_prompt(image_rule: str) -> str:
+    return (
+        _EXTRACTION_PROMPT
+        .replace("__SUBJECT_RULE__", _SUBJECT_RULE)
+        .replace("__IMAGE_RULE__", image_rule)
+    )
 
-OUTPUT JSON STRUCTURE:
 
-{
-  "quiz_title": "...",
-  "subject": "...",
-  "description": "...",
-  "questions": [
-    {
-      "id": 1,
-      "question": "Quyidagi formulani tanlang: $E=mc^2$",
-      "images": ["[image_1]"],
-      "subject": "...",
-      "table_markdown": "...",
-      "options": [
-        {
-          "id": "A",
-          "text": "$E=mc^2$",
-          "is_correct": true
-        },
-        {
-          "id": "B",
-          "text": "$E=\\frac{1}{2}mv^2$",
-          "is_correct": false
-        }
-      ],
-      "meta": {
-        "difficulty": "oson",
-        "topic": "..."
-      }
-    }
-  ]
-}
-""".replace("__SUBJECT_RULE__", _SUBJECT_RULE)
+QUIZ_PROMPT = _extraction_prompt(_PLACEHOLDER_IMAGE_RULE)
+QUIZ_PROMPT_MISTRAL = _extraction_prompt(_OCR_IMAGE_RULE)
 
-QUIZ_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "quiz_title": {"type": "STRING"},
-        "subject": {"type": "STRING", "enum": list(ALLOWED_SUBJECTS)},
-        "description": {"type": "STRING"},
-        "questions": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "id": {"type": "INTEGER"},
-                    "question": {"type": "STRING"},
-                    "images": {
-                        "type": "ARRAY",
-                        "items": {"type": "STRING"}
-                    },
-                    "subject": {"type": "STRING", "enum": list(ALLOWED_SUBJECTS)},
-                    "table_markdown": {"type": "STRING"},
-                    "options": {
-                        "type": "ARRAY",
-                        "items": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "id": {"type": "STRING"},
-                                "text": {"type": "STRING"},
-                                "is_correct": {"type": "BOOLEAN"}
-                            },
-                            "required": ["id", "text", "is_correct"]
-                        }
-                    },
-                    "meta": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "difficulty": {"type": "STRING"},
-                            "topic": {"type": "STRING"}
-                        }
-                    }
-                },
-                "required": [
-                    "id",
-                    "question",
-                    "images",
-                    "subject",
-                    "table_markdown",
-                    "options",
-                    "meta"
-                ]
-            }
-        }
-    },
-    "required": ["quiz_title", "subject", "description", "questions"]
-}
-QUIZ_PROMPT_MISTRAL = """
-You are an AI system that extracts structured quiz data from a PDF file.
 
-TASK:
-Analyze all test questions in the provided PDF and return them in the exact JSON structure defined below.
-
-OUTPUT RULES:
-1. Return valid JSON only.
-2. Do not include markdown, comments, explanations, or extra text.
-3. Do not wrap the JSON in code fences.
-4. The response must start with { and end with }.
-5. Follow the schema exactly. Do not add, remove, or rename fields.
-6. If a value is missing in the source:
-   - use "" for text fields
-   - use [] for arrays
-   - use null only when the value is truly unknown
-
-EXTRACTION RULES:
-1. Extract all questions from the PDF.
-2. Preserve the original language of the question text.
-3. Assign a unique incremental numeric id to each question.
-4. Detect the subject automatically and set it in:
-   - root "subject"
-   - each question "subject"
-__SUBJECT_RULE__
-5. Write the quiz description in Uzbek, maximum 235 characters.
-6. If a question contains a table, convert it to Markdown and store it in "table_markdown".
-7. If a question contains one or more images:
-
-   * put only the exact extracted OCR image IDs into the "images" array.
-   * never generate, recreate, modify, encode, or invent image data.
-   * preserve each image ID exactly as returned by the OCR system.
-   * examples:
-     "images": ["img-2.png"]
-     "images": ["img-2.png", "img-3.jpeg"]
-   * if the question contains no image, return:
-     "images": []
-8. Identify the correct answer if possible:
-   - set "is_correct": true only for the correct option
-   - set all other options to false
-   - if unknown, set all options to false
-9. The "meta" field must be in Uzbek and may include useful details such as difficulty and topic.
-
-FORMULA RULES:
-1. All mathematics, physics, and chemistry formulas must be written in LaTeX.
-2. Preserve formulas as digital text, not plain-text approximations.
-3. All LaTeX backslashes must be escaped for JSON.
-   Examples:
-   - $\\frac{a}{b}$
-   - $\\sqrt{x}$
-   - $\\pi$
-   - ^\\circ
-4. Never output single backslashes in JSON.
-
-Before returning the result, internally ensure the JSON is syntactically valid.
-
-OUTPUT JSON STRUCTURE:
-
-{
-  "quiz_title": "...",
-  "subject": "...",
-  "description": "...",
-  "questions": [
-    {
-      "id": 1,
-      "question": "Quyidagi formulani tanlang: $E=mc^2$",
-      "images": ["img-{image_id}.{image_extension}"],
-      "subject": "...",
-      "table_markdown": "...",
-      "options": [
-        {
-          "id": "A",
-          "text": "$E=mc^2$",
-          "is_correct": true
-        },
-        {
-          "id": "B",
-          "text": "$E=\\frac{1}{2}mv^2$",
-          "is_correct": false
-        }
-      ],
-      "meta": {
-        "difficulty": "oson",
-        "topic": "..."
-      }
-    }
-  ]
-}
-""".replace("__SUBJECT_RULE__", _SUBJECT_RULE)
-
+#: One definition for both providers: Gemini wants the same JSON Schema with
+#: upper-case type names, which ``_as_gemini`` derives below.
 QUIZ_SCHEMA_MISTRAL = {
     "type": "object",
     "properties": {
@@ -292,104 +122,53 @@ QUIZ_SCHEMA_MISTRAL = {
 }
 
 
+def _as_gemini(node):
+    """The same schema in Gemini's dialect: only the type names are upper-cased."""
+    if isinstance(node, dict):
+        return {
+            key: value.upper() if key == "type" and isinstance(value, str) else _as_gemini(value)
+            for key, value in node.items()
+        }
+    if isinstance(node, list):
+        return [_as_gemini(item) for item in node]
+    return node
+
+
+QUIZ_SCHEMA = _as_gemini(QUIZ_SCHEMA_MISTRAL)
+
 
 def ai_generator_by_description(subject: str, description: str, question_count: int) -> str:
-    text_prompt = f"""
-    You are an AI system that generates structured academic test questions from user input.
+    """The prompt for a quiz generated from a topic the student typed.
 
-    TASK:
-    Generate a quiz based on:
-    - selected subject
-    - user-written description
-    - requested number of questions
-    - selected difficulty
-
-    INPUTS:
-    - SUBJECT: {subject}
-    - QUESTION_COUNT: {question_count}
-    - DESCRIPTION: {description}
-
-    STRICT OUTPUT RULES (VERY IMPORTANT):
-    1. Output MUST be valid JSON only.
-    2. Do NOT include explanations, comments, markdown, or extra text outside JSON.
-    3. Do NOT wrap JSON inside code blocks.
-    4. The response must start with `{{` and end with `}}`.
-    5. Follow the JSON schema EXACTLY. Do not add or remove fields.
-    6. Generate exactly {question_count} questions.
-
-    LANGUAGE RULES (VERY STRICT):
-    1. ALL output text MUST be written ONLY in Uzbek language.
-    2. DO NOT use English or any other language in ANY field.
-    3. This includes:
-       - title
-       - description
-       - question_text
-       - options.text
-       - answer_explain
-       - meta fields (difficulty, topic, subject)
-    4. Even short labels, explanations, and descriptions MUST be in Uzbek.
-    5. If SUBJECT is given in Uzbek, DO NOT translate it.
-
-    DIFFICULTY DISTRIBUTION RULES:
-    1. You MUST strictly follow difficulty distribution:
-
-       IF counts are provided:
-       - Generate exactly EASY_COUNT easy questions
-       - Generate exactly MEDIUM_COUNT medium questions
-       - Generate exactly HARD_COUNT hard questions
-
-       IF percentages are provided:
-       - Calculate counts based on QUESTION_COUNT
-       - Distribute questions accordingly
-       - Ensure total equals QUESTION_COUNT
-
-    2. Difficulty levels must be:
-       - "oson"
-       - "o‘rta"
-       - "qiyin"
-
-    3. Assign difficulty per question inside `meta.difficulty`.
-
-    4. Difficulty meaning:
-       - oson → oddiy tushunish darajasi, to‘g‘ridan-to‘g‘ri savollar
-       - o‘rta → biroz fikrlash, formuladan foydalanish
-       - qiyin → murakkab tahlil, bir nechta bosqichli yechim
-
-    CONTENT RULES:
-    1. All questions must belong to the given SUBJECT.
-    2. All questions must match the DESCRIPTION.
-    3. All questions must match the selected DIFFICULTY.
-    4. Avoid duplicate and near-duplicate questions.
-    5. Each question must have exactly 4 options.
-    6. Only one option must have `"is_correct": true`.
-    7. Incorrect options must be realistic and educational.
-
-    FORMULA RULES:
-    1. ALL mathematical, physics, and chemistry formulas MUST be written in LaTeX format.
-    2. All LaTeX backslashes MUST be escaped for JSON.
-    3. Wrap formulas in question text with `$...$`.
-    4. Wrap formulas in explanations with `\\( ... \\)`.
-    5. Use LaTeX only when necessary.
-
-    STRUCTURE RULES:
-    1. Each question MUST have unique incremental numeric `id`, starting from 1.
-    2. `meta` must contain:
-       - difficulty
-       - topic
-       - subject
-    3. `meta` values must be written in Uzbek language.
-    4. Use SUBJECT exactly as provided - copy it character for character into
-       `meta.subject`. SUBJECT is always one of the platform's subjects:
-{_SUBJECT_LIST}
-       Never replace it with a narrower topic name and never translate it.
-
-    FINAL INSTRUCTIONS:
-    - Use SUBJECT as fixed input.
-    - Use DIFFICULTY as fixed input.
-    - Use DESCRIPTION to determine topic coverage, style, and scope.
-    - Generate exactly {question_count} questions.
-    - Return valid JSON only.
-    - Ensure ALL textual content is strictly in Uzbek language.
+    No difficulty and no image source reach this call, so the prompt sets both
+    itself: the difficulty mix is left to the model and "images" stays empty.
     """
+    return f"""
+You are an AI system that generates structured academic test questions.
 
-    return text_prompt
+INPUTS:
+- SUBJECT: {subject}
+- DESCRIPTION: {description}
+- QUESTION_COUNT: {question_count}
+
+RULES:
+1. Generate exactly {question_count} questions about SUBJECT, covering what
+   DESCRIPTION asks for. No duplicate or near-duplicate questions.
+2. Every question has exactly 4 options, exactly one of them "is_correct": true.
+   Wrong options must be plausible and educational, never filler.
+3. Give every question a unique incremental numeric id, starting from 1.
+4. ALL text MUST be written in Uzbek -- quiz_title, description, question,
+   options and every "meta" value. Never switch to English or another language.
+5. "meta" carries difficulty, topic and subject. "difficulty" is exactly one of:
+   - "oson"  -> to'g'ridan-to'g'ri, oddiy tushunish darajasi
+   - "o'rta" -> biroz fikrlash, formuladan foydalanish
+   - "qiyin" -> murakkab, bir nechta bosqichli yechim
+   Use all three across the quiz instead of one level for every question.
+6. "meta.subject" is SUBJECT copied character for character. SUBJECT is always
+   one of the platform's subjects:
+{_SUBJECT_LIST}
+   Never replace it with a narrower topic name and never translate it.
+7. Write every mathematics, physics and chemistry formula as LaTeX inside $...$
+   and escape each backslash for JSON. Use LaTeX only where a formula needs it.
+8. "images" is always [] -- a generated question has no source image.
+"""
