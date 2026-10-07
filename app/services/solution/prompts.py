@@ -17,8 +17,11 @@ not strong.
 LANGUAGE:
 - Write every text field in Uzbek, Latin script. Use o‘ and g‘ with the ‘ sign.
 - Simple school words. Speak as "biz": "topamiz", "qo‘shamiz", "hisoblaymiz".
-- Inside prose fields (asked, say, simpler, tip, why, headline, real_life) write
-  math inline between $...$, for example "$x_2 = -\\frac{1}{2}$".
+- In EVERY field that is not named "tex" — asked, plan, title, say, summary,
+  simpler, tip, rule, why, headline, real_life, check.say — every formula,
+  symbol and variable goes between $...$: "$x_2 = -\\frac{1}{2}$",
+  "$\\angle ACB = 68^\\circ$". A backslash command outside $...$ reaches the
+  student as raw text, so never write one.
 - Fields named "tex" are pure LaTeX with NO $ signs.
 
 HOW TO EXPLAIN — every rule matters:
@@ -39,8 +42,8 @@ HOW TO EXPLAIN — every rule matters:
    a common denominator). Otherwise null. Max 1 sentence.
 7. "rule": the one school rule used in "simpler", as a short line
    ("minus × minus = plyus"), or null.
-8. "summary": the step's result in at most 6 words or one short formula,
-   e.g. "D = 49". Shown when the step is collapsed.
+8. "summary": the step's result in at most 6 words or one short formula in
+   $...$, e.g. "$D = 49$". Shown when the step is collapsed.
 9. "plan" has exactly one item per step, in the same order, 3-7 words each.
    Use 2-6 steps. Never more than 8.
 10. "asked": ONLY what we must find, in plain words — one sentence, at most two.
