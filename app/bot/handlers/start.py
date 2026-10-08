@@ -181,7 +181,11 @@ async def finish_registration(callback: CallbackQuery, state: FSMContext, bot: B
     await callback.message.answer("Ro'yxatdan o'tish yakunlandi.")
     if data.get("pending_room_code"):
         try:
-            await enter_room(callback.message, data["pending_room_code"])
+            await enter_room(
+                callback.message,
+                data["pending_room_code"],
+                telegram_id=telegram_user.id,
+            )
         except HTTPException as exc:
             await callback.message.answer(str(exc.detail))
     else:

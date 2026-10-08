@@ -60,6 +60,26 @@ def room_keyboard(session, username, *, is_host, group_chat=False):
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+CHANNEL_REFRESH = "channel:refresh:"
+CHANNEL_FINISH = "channel:finish:"
+
+
+def channel_host_keyboard(session_id: int) -> InlineKeyboardMarkup:
+    """The host's private controls for an open channel quiz."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="🔄 Yangilash",
+                callback_data=f"{CHANNEL_REFRESH}{session_id}",
+            )],
+            [InlineKeyboardButton(
+                text="🏁 Testni yakunlash",
+                callback_data=f"{CHANNEL_FINISH}{session_id}",
+            )],
+        ]
+    )
+
+
 def player_keyboard(session):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(

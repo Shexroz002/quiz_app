@@ -66,6 +66,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
     async def test_group_room_creation_sends_private_host_control(self):
         user = SimpleNamespace(id=22)
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             host_id=user.id,
@@ -129,7 +130,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
     async def test_duplicate_create_callback_reuses_durable_room(self):
         user = SimpleNamespace(id=22)
         room = SimpleNamespace(session_id=12)
-        session = SimpleNamespace(id=12, host_id=user.id)
+        session = SimpleNamespace(id=12, host_id=user.id, started_at=None)
         db = SimpleNamespace(
             execute=AsyncMock(side_effect=[
                 _ScalarResult(None),
@@ -177,7 +178,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
     async def test_host_start_reuses_service_and_schedules_session_deadline(self):
         deadline = object()
         user = SimpleNamespace(id=22)
-        session = SimpleNamespace(id=12, quiz_id=4, deadline_at=deadline)
+        session = SimpleNamespace(id=12, quiz_id=4, deadline_at=deadline, started_at=None)
         room = SimpleNamespace(chat_id=5700644405)
         service = SimpleNamespace(start=AsyncMock(return_value=session))
         callback = SimpleNamespace(
@@ -270,6 +271,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
         deadline = object()
         user = SimpleNamespace(id=22)
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             deadline_at=deadline,
@@ -385,6 +387,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
     async def test_waiting_room_join_sends_detailed_confirmation(self):
         user = SimpleNamespace(id=22)
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             host_id=1,
@@ -456,6 +459,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
     async def test_running_room_deep_link_validates_participant_then_shows_player(self):
         user = SimpleNamespace(id=22)
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -513,6 +517,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
 
     async def test_room_start_link_is_sent_to_every_participant(self):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             status="running",
@@ -552,6 +557,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
 
     async def test_room_start_delivery_continues_when_one_chat_is_unavailable(self):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             status="running",
@@ -591,6 +597,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
             leaderboard_delivered_at=None,
         )
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -644,7 +651,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
             published_revision=None,
             leaderboard_delivered_at=None,
         )
-        session = SimpleNamespace(id=12, quiz_id=4, status="finished", duration_minutes=5)
+        session = SimpleNamespace(id=12, quiz_id=4, status="finished", duration_minutes=5, started_at=None)
         quiz = SimpleNamespace(subject="Biologiya", title="Namunaviy test")
         db = SimpleNamespace(
             execute=AsyncMock(return_value=_ScalarResult(room)),
@@ -693,6 +700,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
             leaderboard_delivered_at=None,
         )
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             status="finished",
@@ -737,6 +745,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
             leaderboard_delivered_at=None,
         )
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             status="finished",
@@ -782,6 +791,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
             leaderboard_delivered_at=None,
         )
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             status="finished",
@@ -818,7 +828,7 @@ class TelegramQuizRoomDeliveryTests(IsolatedAsyncioTestCase):
 class TelegramQuizRoomFormattingTests(TestCase):
     def test_host_waiting_and_private_running_templates(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15, max_participants=20)
+        session = SimpleNamespace(duration_minutes=15, max_participants=20, started_at=None)
 
         waiting = format_host_waiting_room(quiz, session, 1, 30)
         running = format_private_running_room(quiz, session)
@@ -834,7 +844,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
         return_value="https://example.com/bot/webapp/?quiz_id=4",
     )
     def test_private_player_keyboard_uses_existing_room_webapp(self, _quiz_webapp_url):
-        session = SimpleNamespace(id=12, quiz_id=4)
+        session = SimpleNamespace(id=12, quiz_id=4, started_at=None)
 
         button = player_keyboard(session).inline_keyboard[0][0]
 
@@ -846,7 +856,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_waiting_group_room_template(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15, max_participants=20)
+        session = SimpleNamespace(duration_minutes=15, max_participants=20, started_at=None)
         participants = [
             {
                 "first_name": "Ali",
@@ -878,7 +888,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_waiting_group_room_limits_participant_preview(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15, max_participants=20)
+        session = SimpleNamespace(duration_minutes=15, max_participants=20, started_at=None)
         participants = [
             {
                 "first_name": f"O'quvchi {index}",
@@ -896,7 +906,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_running_group_room_template(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15)
+        session = SimpleNamespace(duration_minutes=15, started_at=None)
 
         text = format_running_group_room(quiz, session, 8, 30)
 
@@ -915,7 +925,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_room_start_message_matches_multiplayer_template(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15)
+        session = SimpleNamespace(duration_minutes=15, started_at=None)
 
         text = format_room_start_message(quiz, session)
 
@@ -927,7 +937,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_join_confirmation_contains_room_details_and_host_name(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15, max_participants=20)
+        session = SimpleNamespace(duration_minutes=15, max_participants=20, started_at=None)
         participants = [
             {
                 "first_name": "Shehroz",
@@ -964,6 +974,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
     )
     def test_running_room_opens_webapp_directly(self, _quiz_webapp_url):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -982,6 +993,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_group_waiting_room_has_only_join_button(self):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -1005,6 +1017,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_private_waiting_room_keeps_existing_host_button_label(self):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -1017,6 +1030,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_running_group_room_returns_to_private_bot(self):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -1040,6 +1054,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_waiting_room_participant_only_sees_share_button(self):
         session = SimpleNamespace(
+            started_at=None,
             id=12,
             quiz_id=4,
             join_code="ABC123",
@@ -1055,7 +1070,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_leaderboard_uses_participant_full_name(self):
         quiz = SimpleNamespace(subject="Biologiya", title="Namunaviy test")
-        session = SimpleNamespace(duration_minutes=5)
+        session = SimpleNamespace(duration_minutes=5, started_at=None)
 
         text = format_leaderboard(
             quiz,
@@ -1091,7 +1106,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_group_leaderboard_uses_existing_order_and_compact_template(self):
         quiz = SimpleNamespace(subject="Biologiya", title="Namunaviy test")
-        session = SimpleNamespace(duration_minutes=5)
+        session = SimpleNamespace(duration_minutes=5, started_at=None)
         rows = [
             {
                 "display_name": "Ali Valiyev",
@@ -1146,7 +1161,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_group_leaderboard_summarizes_future_overflow(self):
         quiz = SimpleNamespace(subject="Matematika", title="Algebra")
-        session = SimpleNamespace(duration_minutes=15)
+        session = SimpleNamespace(duration_minutes=15, started_at=None)
         rows = [
             {
                 "display_name": f"O'quvchi {position}",
@@ -1166,7 +1181,7 @@ class TelegramQuizRoomFormattingTests(TestCase):
 
     def test_group_leaderboard_stays_within_limit_after_html_escaping(self):
         quiz = SimpleNamespace(subject="&" * 80, title="<" * 180)
-        session = SimpleNamespace(duration_minutes=15)
+        session = SimpleNamespace(duration_minutes=15, started_at=None)
         rows = [
             {
                 "display_name": "&" * 60,

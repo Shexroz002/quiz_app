@@ -1,6 +1,7 @@
 from pydantic import BaseModel, field_serializer
 from datetime import datetime
 
+from app.models.account.user import GenderType
 from app.schemas.quiz.question import BASE_URL
 
 
@@ -29,6 +30,12 @@ class SessionParticipantList(BaseModel):
         if value.startswith("http"):
             return value
         return f"{BASE_URL}/{value}"
+
+
+class StudentSessionParticipant(SessionParticipantList):
+    """A participant as the student app's waiting room draws them: boy or girl."""
+
+    gender: GenderType | None = None
 
 
 class SessionDetail(BaseModel):

@@ -46,7 +46,7 @@ from app.bot.keyboards.reply import (
     MENU_TESTS_TEXT,
     main_menu_keyboard,
 )
-from app.bot.states import QuizDurationState, QuizGenerationState
+from app.bot.states import CHANNEL_TARGET_KEY, QuizDurationState, QuizGenerationState
 from app.bot.utils.subjects import SUBJECT_ICONS, subject_icon  # noqa: F401  (re-export)
 
 QUIZ_SOURCE_PROMPT = (
@@ -54,7 +54,7 @@ QUIZ_SOURCE_PROMPT = (
     "📄 PDF fayldan — tayyor savollarni faylingizdan oladi\n"
     "✨ AI orqali — siz yozgan mavzu bo‘yicha savollar tuzadi"
 )
-from app.bot.services.quiz_room import create_room, parse_duration
+from app.bot.services.quiz_room import create_channel_room, create_room, parse_duration
 from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
 from app.models.quiz import Question, Quiz
@@ -85,6 +85,23 @@ def parse_callback_values(data: str | None, prefix: str, count: int) -> tuple[in
     if len(values) != count or any(not value.isdigit() for value in values):
         return None
     return tuple(int(value) for value in values)
+
+
+async def publish_chosen_quiz(bot, state: FSMContext, *, telegram_id: int,
+                              chat_id: int, message_id: int, quiz_id: int,
+                              minutes: int) -> str:
+    """Create the room the user is actually in the middle of making.
+
+    The friends flow and the channel flow share every screen up to here; the
+    channel picked in /kanal is what tells them apart.
+    """
+    channel_chat_id = (await state.get_data()).get(CHANNEL_TARGET_KEY)
+    if channel_chat_id:
+        await create_channel_room(bot, telegram_id, channel_chat_id, quiz_id, minutes)
+        await state.update_data(**{CHANNEL_TARGET_KEY: None})
+        return "Kanalga joylandi."
+    await create_room(bot, telegram_id, chat_id, message_id, quiz_id, minutes)
+    return "Xona yaratildi."
 
 
 async def get_quiz_catalog_page(page: int, user_id: int):
@@ -439,6 +456,7 @@ async def show_quizzes_from_menu(message: Message, state: FSMContext):
 @router.message(F.text == MENU_FRIENDS_TEXT)
 async def show_friends_quizzes_from_menu(message: Message, state: FSMContext):
     await state.set_state(None)
+    await state.update_data(**{CHANNEL_TARGET_KEY: None})
     await show_quiz_catalog(message, state, page=1, friends_mode=True)
 
 
@@ -488,6 +506,7 @@ async def show_quizzes(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == MENU_FRIENDS)
 async def show_friends_quizzes(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(**{CHANNEL_TARGET_KEY: None})
     if callback.message is not None:
         await state.update_data(quiz_catalog_header_message_id=callback.message.message_id)
     await show_quiz_catalog(callback, state, page=1, friends_mode=True)
@@ -658,19 +677,20 @@ async def set_friends_duration(callback: CallbackQuery, state: FSMContext):
         await callback.answer("Test topilmadi yoki sizga tegishli emas.", show_alert=True)
         return
     try:
-        await create_room(
+        confirmation = await publish_chosen_quiz(
             callback.bot,
-            callback.from_user.id,
-            callback.message.chat.id,
-            callback.message.message_id,
-            quiz_id,
-            parse_duration(minutes),
+            state,
+            telegram_id=callback.from_user.id,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id,
+            quiz_id=quiz_id,
+            minutes=parse_duration(minutes),
         )
     except HTTPException as exc:
         await callback.answer(str(exc.detail), show_alert=True)
         return
     await state.set_state(None)
-    await callback.answer("Xona yaratildi.")
+    await callback.answer(confirmation)
 
 
 async def prepare_custom_duration(
@@ -845,19 +865,20 @@ async def receive_friends_custom_duration(message: Message, state: FSMContext):
     quiz_id = quiz["id"]
 
     try:
-        await create_room(
+        confirmation = await publish_chosen_quiz(
             message.bot,
-            message.from_user.id,
-            message.chat.id,
-            message_id,
-            quiz_id,
-            minutes,
+            state,
+            telegram_id=message.from_user.id,
+            chat_id=message.chat.id,
+            message_id=message_id,
+            quiz_id=quiz_id,
+            minutes=minutes,
         )
     except HTTPException as exc:
         await message.answer(f"❗ {exc.detail}")
         return
     await state.set_state(None)
-    await message.answer("Xona yaratildi.")
+    await message.answer(confirmation)
 
 
 @router.callback_query(F.data.in_(MENU_MESSAGES.keys()))

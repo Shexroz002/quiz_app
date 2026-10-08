@@ -14,9 +14,11 @@ from dataclasses import dataclass, field
 
 _MACRO = re.compile(r"\\hl([a-z])\{")
 _COLOUR_OF = {"a": 1, "b": 2, "c": 3}
-#: Control characters a broken escape leaves behind: a lone "\v" or "\f" in the
-#: model's JSON arrives as a vertical tab or a form feed instead of a command.
-_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+#: Control characters a broken escape leaves behind. A lone backslash before a
+#: JSON escape letter arrives as a control character instead of a command:
+#: "\frac" as a form feed, "\times" and "\text" as a tab, "\right" as a
+#: carriage return. Tab and CR were missed at first; Mistral produced both.
+_CONTROL = re.compile(r"[\x00-\x1f]")
 _MACRO_OUTSIDE_MATH = re.compile(r"\\hl[a-z]\{")
 _FORBIDDEN_COLOUR = re.compile(r"\\(textcolor|color|colorbox)\b")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -126,6 +128,9 @@ def _tex_fields(data: dict) -> list[str]:
     out: list[str] = []
     for step in data.get("steps") or []:
         out += [line.get("tex") or "" for line in step.get("board") or []]
+    tape = data.get("tape")
+    if isinstance(tape, dict):
+        out += [part.get("expr") or "" for part in tape.get("parts") or []]
     out.append((data.get("answer") or {}).get("tex") or "")
     if data.get("formula"):
         out.append(data["formula"].get("tex") or "")
@@ -215,7 +220,7 @@ def validate(data: dict, *, option_labels: list[str] | None = None) -> Verdict:
         v.hard.append("do not use \\color or \\textcolor; mark values with \\hla, \\hlb, \\hlc")
     if any("$" in tex for tex in _tex_fields(data)):
         v.hard.append("tex fields are pure LaTeX: remove every $ sign, put words in \\text{...}")
-    if any(_CONTROL.search(text) or "\n" in text for text in _tex_fields(data)):
+    if any(_CONTROL.search(text) for text in _tex_fields(data)):
         v.hard.append("a tex field contains a line break or control character; escape backslashes as \\\\")
     for name, text in _prose_fields(data):
         if _CONTROL.search(text):

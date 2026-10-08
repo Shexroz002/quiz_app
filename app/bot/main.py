@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.enums import ChatType
 
 from app.bot.handlers.challenge import router as challenge_router
+from app.bot.handlers.channel import router as channel_router
 from app.bot.handlers.menu import router as menu_router
 from app.bot.handlers.quiz import router as quiz_router
 from app.bot.handlers.quiz_room import router as quiz_room_router
@@ -29,6 +30,7 @@ async def main():
         start_router,
         menu_router,
         quiz_router,
+        channel_router,
     )
 
     group_router = Router(name="group")

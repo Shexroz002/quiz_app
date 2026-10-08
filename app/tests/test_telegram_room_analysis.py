@@ -285,7 +285,7 @@ class PublishRoomHookTests(IsolatedAsyncioTestCase):
             published_revision=None,
             leaderboard_delivered_at=None,
         )
-        session = SimpleNamespace(id=12, quiz_id=4, status="finished", duration_minutes=5)
+        session = SimpleNamespace(id=12, quiz_id=4, status="finished", duration_minutes=5, started_at=None)
         calls = []
         db = SimpleNamespace(
             execute=AsyncMock(

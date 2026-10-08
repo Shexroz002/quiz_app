@@ -52,6 +52,7 @@ class SessionParticipantRepository:
                 SessionParticipant.nickname,
                 SessionParticipant.joined_at,
                 User.profile_image,
+                User.gender,
                 SessionParticipant.is_host,
                 SessionParticipant.participant_status
             )

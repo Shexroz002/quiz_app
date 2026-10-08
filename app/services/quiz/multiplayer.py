@@ -1,10 +1,10 @@
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.models import AttemptAnswer
+from app.models import AttemptAnswer, QuizAttempt
 from app.models.quiz.real_time_quiz.quiz_session import SessionStatus, SessionType
 from app.models.quiz.real_time_quiz.session_participant import ParticipantStatus
-from app.services.quiz.quiz_session import QuizSessionService
+from app.services.quiz.quiz_session import QuizSessionService, is_open_session  # noqa: F401
 from app.utils.datetime import utc_now
 
 
@@ -67,6 +67,38 @@ class MultiplayerQuizService(QuizSessionService):
             raise HTTPException(status_code=404, detail="Xona topilmadi.")
         return session
 
+    async def create_open_session(self, *, quiz_id: int, duration_minutes: int, user):
+        """A session that is running the moment it is published.
+
+        No waiting room (nobody has to be present to start it), no deadline and
+        no participant cap -- a channel post reaches an unknown crowd that
+        arrives one by one.
+        """
+        session = await self.create_managed_session(
+            quiz_id=quiz_id,
+            duration_minutes=duration_minutes,
+            max_participants=None,
+            user=user,
+            commit=False,
+        )
+        session.status = SessionStatus.running
+        session.started_at = utc_now()
+        session.deadline_at = None
+        await self.db.flush()
+        return session
+
+    async def finish_open_session(self, session_id: int, user):
+        """Closing is the host's call: an open session has no clock to expire."""
+        session = await self.lock_session(session_id)
+        if session.host_id != user.id:
+            raise HTTPException(status_code=403, detail="Faqat test egasi yakunlashi mumkin.")
+        if session.status == SessionStatus.finished:
+            return session
+        if session.status != SessionStatus.running:
+            raise HTTPException(status_code=400, detail="Test boshlanmagan.")
+        await self.finalize_session(session_id, "host_finished")
+        return await self.session_repo.get_by_id(session_id)
+
     async def join(self, session_id: int, user):
         session = await self.lock_session(session_id)
         participant = await self.participant_repo.get_by_session_user(session_id, user.id)
@@ -105,7 +137,9 @@ class MultiplayerQuizService(QuizSessionService):
             return session
         if session.deadline_at is not None and utc_now() >= session.deadline_at:
             await self.finalize_session(session_id, "time_expired")
-        elif await self.attempt_repo.all_session_attempts_finished(session_id):
+        elif not is_open_session(session) and await self.attempt_repo.all_session_attempts_finished(session_id):
+            # An open session would close the moment its first player finished,
+            # so only a session with a deadline ends on "everybody is done".
             await self.finalize_session(session_id, "all_finished")
         return await self.session_repo.get_by_id(session_id)
 
@@ -173,7 +207,35 @@ class MultiplayerQuizService(QuizSessionService):
                     "spend_time": int(row["spend_time_seconds"] or 0),
                 }
             )
+        if is_open_session(session):
+            return await self._open_session_leaderboard(session, leaderboard)
         return leaderboard
+
+    async def _open_session_leaderboard(self, session, rows):
+        """An open session has no shared start, so a player's time is their own:
+        from opening the quiz to finishing it. Participants who only followed the
+        link without playing are left out instead of sitting at the bottom on 0."""
+        attempts = (await self.db.execute(
+            select(
+                QuizAttempt.participant_id,
+                QuizAttempt.created_at,
+                QuizAttempt.finished_at,
+            ).where(
+                QuizAttempt.session_id == session.id,
+                QuizAttempt.finished.is_(True),
+            )
+        )).all()
+        spent = {
+            participant_id: max(0, int((finished_at - created_at).total_seconds()))
+            for participant_id, created_at, finished_at in attempts
+            if created_at is not None and finished_at is not None
+        }
+        played = [
+            {**row, "spend_time": spent[row["participant_id"]]}
+            for row in rows
+            if row["participant_id"] in spent
+        ]
+        return sorted(played, key=lambda row: (-row["correct_answers"], row["spend_time"]))
 
     @staticmethod
     async def now():

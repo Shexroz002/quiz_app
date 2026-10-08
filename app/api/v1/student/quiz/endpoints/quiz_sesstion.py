@@ -21,7 +21,7 @@ from app.schemas.quiz.quiz_session import (
     StartSessionResponse, StartSessionSinglePlayerResponse, StartSessionSinglePlayerBaseResponse,
     QuestionErrorAnalyticSessionResponse, SessionLeaderboardRow, ParticipantResultResponse
 )
-from app.schemas.quiz.session_participant import SessionParticipantList, SessionDetail
+from app.schemas.quiz.session_participant import SessionDetail, StudentSessionParticipant
 from app.services.notification.notification_service import get_notification_service
 from app.services.quiz.quiz_session import get_quiz_session_service
 
@@ -71,7 +71,7 @@ async def get_multiplayer_player_quiz_info(
                                                           status="waiting")
 
 
-@quiz_session_router.get("/multiplayer/{session_id}/participants/", response_model=Page[SessionParticipantList])
+@quiz_session_router.get("/multiplayer/{session_id}/participants/", response_model=Page[StudentSessionParticipant])
 async def get_session_participants(
         session_id: int,
         current_user: User = Depends(get_current_user),

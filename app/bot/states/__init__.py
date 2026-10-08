@@ -13,6 +13,14 @@ class QuizGenerationState(StatesGroup):
     waiting_for_ai_question_count = State()
 
 
+#: FSM data key: the channel a quiz is being published to, if any.
+CHANNEL_TARGET_KEY = "channel_target_chat_id"
+
+
+class ChannelQuizState(StatesGroup):
+    waiting_for_channel = State()
+
+
 class QuizDurationState(StatesGroup):
     waiting_for_single_player_custom_minutes = State()
     waiting_for_friends_custom_minutes = State()

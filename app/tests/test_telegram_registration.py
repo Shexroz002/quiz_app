@@ -128,7 +128,7 @@ class FinishRegistrationTests(IsolatedAsyncioTestCase):
             message=SimpleNamespace(answer=AsyncMock(), edit_reply_markup=AsyncMock()),
         )
 
-    async def _finish(self, selected, *, user=None, error=None):
+    async def _finish(self, selected, *, user=None, error=None, room_code=None):
         callback = self._callback()
         state = SimpleNamespace(
             get_data=AsyncMock(return_value={
@@ -137,6 +137,7 @@ class FinishRegistrationTests(IsolatedAsyncioTestCase):
                 "last_name": "Valiyev",
                 "phone_number": "+998901112233",
                 "selected_subject_ids": selected,
+                "pending_room_code": room_code,
             }),
             clear=AsyncMock(),
         )
@@ -144,8 +145,10 @@ class FinishRegistrationTests(IsolatedAsyncioTestCase):
         with patch("app.bot.handlers.start.get_user_by_telegram_id", AsyncMock(return_value=user)), \
              patch("app.bot.handlers.start.save_telegram_profile_photo", AsyncMock(return_value=None)), \
              patch("app.bot.handlers.start.register_telegram_student", register), \
+             patch("app.bot.handlers.start.enter_room", AsyncMock()) as enter, \
              patch("app.bot.handlers.start.show_main_menu", AsyncMock()):
             await finish_registration(callback, state, SimpleNamespace())
+        self.entered = enter
         return callback, state, register
 
     async def test_registration_stores_the_picked_subjects(self):
@@ -155,6 +158,22 @@ class FinishRegistrationTests(IsolatedAsyncioTestCase):
         self.assertEqual(register.await_args.kwargs["phone_number"], "+998901112233")
         self.assertNotIn("grade", register.await_args.kwargs)
         state.clear.assert_awaited_once()
+
+    async def test_a_pending_room_is_entered_as_the_new_student(self):
+        """Kanaldan kelgan yangi o'quvchi: ro'yxatdan o'tgach testga tushishi kerak.
+
+        Bot o'z xabariga javob yozadi, uning ``from_user`` i esa botning o'zi --
+        shuning uchun o'quvchi aniq uzatiladi.
+        """
+        await self._finish([1], room_code="A1B2C3")
+
+        self.assertEqual(self.entered.await_args.args[1], "A1B2C3")
+        self.assertEqual(self.entered.await_args.kwargs["telegram_id"], 500)
+
+    async def test_without_a_pending_room_the_menu_opens(self):
+        await self._finish([1])
+
+        self.entered.assert_not_awaited()
 
     async def test_confirming_with_nothing_selected_is_refused(self):
         callback, _, register = await self._finish([])

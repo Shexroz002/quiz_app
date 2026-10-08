@@ -36,6 +36,15 @@ logger = logging.getLogger(__name__)
 FINALIZATION_REASONS = {"all_finished", "time_expired", "host_finished"}
 
 
+def is_open_session(session) -> bool:
+    """A channel quiz: started, but with no shared deadline.
+
+    It stays open until its host closes it, anyone holding the link can still
+    join while it runs, and every player keeps their own clock.
+    """
+    return session.started_at is not None and session.deadline_at is None
+
+
 def generate_join_code() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
@@ -292,7 +301,12 @@ class QuizSessionService:
         if not quiz_session:
             raise HTTPException(status_code=404, detail="Invalid session code")
 
-        if quiz_session.status != "waiting":
+        # An open session (a channel quiz) has no waiting room: it admits players
+        # for as long as it runs, which is until its host closes it.
+        open_and_running = (
+            quiz_session.status == SessionStatus.running and is_open_session(quiz_session)
+        )
+        if quiz_session.status != "waiting" and not open_and_running:
             raise HTTPException(status_code=400, detail="Session already started")
 
         if quiz_session.session_type == SessionType.group:
@@ -324,6 +338,7 @@ class QuizSessionService:
                     "profile_image": f"{BASE_URL}/{user.profile_image}" if user.profile_image else None,
                     "first_name": user.first_name,
                     "last_name": user.last_name,
+                    "gender": user.gender.value if user.gender else None,
                     "joined_at": participant.joined_at.isoformat() if participant.joined_at else None,
                     "status": ParticipantStatus.READY.value,
                     "participants_online": session_ws_manager.count(quiz_session.id),
@@ -515,9 +530,17 @@ class QuizSessionService:
             attempt=attempt,
         )
         result["finished"] = True
+        if is_open_session(session):
+            # A channel quiz has no shared clock, so the time that counts is the
+            # player's own: from opening the quiz to finishing it.
+            result["spend_time"] = max(
+                0, int((now - attempt.created_at).total_seconds())
+            )
 
         await self.db.flush()
-        if await self.attempt_repo.all_session_attempts_finished(session_id):
+        if not is_open_session(session) and await self.attempt_repo.all_session_attempts_finished(session_id):
+            # The second auto-close path: an open session must survive its
+            # players finishing, it ends only when the host closes it.
             await self.finalize_session(session_id, "all_finished")
         else:
             await self.db.commit()

@@ -3,11 +3,13 @@ import hashlib
 import logging
 from html import escape
 
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.enums import ChatMemberStatus, ChatType
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from app.bot.keyboards.quiz_room import (
+    channel_host_keyboard,
     host_room_keyboard,
     player_keyboard,
     room_keyboard,
@@ -21,8 +23,8 @@ from app.bot.services.room_analysis import (
 )
 from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
-from app.models import Quiz, QuizSession, SessionParticipant, User
-from app.services.quiz.multiplayer import MultiplayerQuizService
+from app.models import Quiz, QuizAttempt, QuizSession, SessionParticipant, User
+from app.services.quiz.multiplayer import MultiplayerQuizService, is_open_session
 
 logger = logging.getLogger(__name__)
 MAX_ROOM_PARTICIPANTS = 20
@@ -32,6 +34,7 @@ GROUP_ROOM_MESSAGE_REVISION_VERSION = "1"
 ROOM_PARTICIPANT_PREVIEW_LIMIT = 8
 GROUP_LEADERBOARD_PREVIEW_LIMIT = MAX_ROOM_PARTICIPANTS
 GROUP_ROOM_MESSAGE_MAX_LENGTH = 4000
+CHANNEL_LEADERBOARD_PREVIEW_LIMIT = 10
 
 
 def parse_duration(value):
@@ -312,6 +315,44 @@ def format_waiting_group_room(quiz, session, participants, question_count):
     )
 
 
+def format_channel_room(quiz, session, participant_count, question_count):
+    """The channel post while the quiz is open.
+
+    No countdown is promised: an open session has no shared deadline, so the
+    duration is what the quiz is worth, not a clock the reader is racing.
+    """
+    return (
+        "📣 <b>Yangi test</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"📝 {escape(quiz.title[:180])}\n"
+        f"❓ {question_count} savol · ⏱ ~{session.duration_minutes} daqiqa\n\n"
+        f"👥 {participant_count} ishtirokchi\n\n"
+        "Istalgan vaqtda ishlashingiz mumkin. 👇"
+    )
+
+
+def format_channel_closed(quiz, session, participant_count):
+    """What the original channel post becomes once the host closes the quiz."""
+    return (
+        "🔒 <b>Test yakunlandi</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"📝 {escape(quiz.title[:180])}\n\n"
+        f"👥 {participant_count} ishtirokchi\n\n"
+        "Natijalar quyidagi xabarda."
+    )
+
+
+def format_channel_host_control(quiz, session, participant_count, finished_count):
+    return (
+        "🎛 <b>Kanal testi faol</b>\n\n"
+        f"📚 {escape((quiz.subject or 'Umumiy')[:80])}\n"
+        f"📝 {escape(quiz.title[:180])}\n"
+        f"⏱ ~{session.duration_minutes} daqiqa\n\n"
+        f"👥 {participant_count} ishtirokchi · ✅ {finished_count} yakunladi\n\n"
+        "Test ochiq turibdi. Yakunlaganingizda kanalga natijalar jadvali chiqadi."
+    )
+
+
 def format_running_group_room(quiz, session, participant_count, question_count):
     return (
         "🚀 <b>Test boshlandi!</b>\n\n"
@@ -336,10 +377,22 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
             return
 
         is_group_chat = room.chat_id < 0
+        open_room = is_open_session(session)
         quiz = await db.get(Quiz, session.quiz_id)
         if session.status == "finished":
             rows = await service.leaderboard(session)
-            if is_group_chat:
+            if is_group_chat and open_room:
+                # The channel keeps its announcement and gets the table as its
+                # own post, so subscribers see a result, not an edited old post.
+                text = format_channel_closed(quiz, session, len(rows))
+                keyboard = None
+                await bot.send_message(
+                    chat_id=room.chat_id,
+                    text=format_group_leaderboard(quiz, session, rows),
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            elif is_group_chat:
                 text = format_group_leaderboard(quiz, session, rows)
                 keyboard = None
             else:
@@ -360,7 +413,15 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
                 session_id,
                 pagination=False,
             )
-            if is_group_chat and session.status == "waiting":
+            if is_group_chat and open_room:
+                question_count = await service.quiz_repo.quiz_question_count(quiz.id)
+                text = format_channel_room(
+                    quiz,
+                    session,
+                    await channel_player_count(db, session_id, participants),
+                    question_count,
+                )
+            elif is_group_chat and session.status == "waiting":
                 question_count = await service.quiz_repo.quiz_question_count(quiz.id)
                 text = format_waiting_group_room(
                     quiz,
@@ -441,6 +502,180 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
         queue_room_analysis_deliveries(analysis_ids)
 
 
+CHANNEL_ADMIN_STATUSES = {ChatMemberStatus.CREATOR, ChatMemberStatus.ADMINISTRATOR}
+
+
+CHAT_MEMBER_STATUSES = CHANNEL_ADMIN_STATUSES | {ChatMemberStatus.MEMBER}
+
+
+async def ensure_publish_rights(bot, telegram_id, chat_id) -> None:
+    """Both sides must still be allowed to publish into the chat.
+
+    Rights can be taken away between picking a chat and publishing to it, so
+    this is checked again at publish time rather than trusted from the earlier
+    step -- otherwise a demoted admin could keep posting from a stale session.
+
+    A channel needs the bot to be an administrator that may post; a group only
+    needs it to be in the chat. Either way the person must be an admin there.
+    """
+    bot_user = await bot.get_me()
+    try:
+        chat = await bot.get_chat(chat_id)
+        bot_member = await bot.get_chat_member(chat_id, bot_user.id)
+        author_member = await bot.get_chat_member(chat_id, telegram_id)
+    except TelegramAPIError as exc:
+        raise HTTPException(
+            403,
+            "Chatni tekshira olmadim. Bot hali ham o'sha yerdami?",
+        ) from exc
+
+    is_channel = chat.type == ChatType.CHANNEL
+    if is_channel:
+        can_publish = bot_member.status in CHANNEL_ADMIN_STATUSES and getattr(
+            bot_member, "can_post_messages", True
+        )
+        refusal = (
+            "Bot kanalga post yubora olmaydi. Uni administrator qilib, "
+            "«Post yuborish» huquqini bering."
+        )
+    else:
+        can_publish = bot_member.status in CHAT_MEMBER_STATUSES
+        refusal = "Bot bu guruhda yo'q. Avval botni guruhga qo'shing."
+    if not can_publish:
+        raise HTTPException(403, refusal)
+
+    if author_member.status not in CHANNEL_ADMIN_STATUSES:
+        raise HTTPException(
+            403,
+            "Kanalga test joylashni faqat kanal administratori qila oladi."
+            if is_channel
+            else "Guruhga test joylashni faqat guruh administratori qila oladi.",
+        )
+
+
+async def channel_player_count(db, session_id, participants) -> int:
+    """How many people the quiz counts as players.
+
+    The host publishes the quiz without taking it, so they are not a player --
+    unless they took it too, in which case their result is in the leaderboard
+    and leaving them out would contradict the "finished" count next to it.
+    """
+    host_attempts = await db.scalar(
+        select(func.count(QuizAttempt.id))
+        .select_from(QuizAttempt)
+        .join(SessionParticipant, SessionParticipant.id == QuizAttempt.participant_id)
+        .where(
+            SessionParticipant.session_id == session_id,
+            SessionParticipant.is_host.is_(True),
+        )
+    )
+    players = sum(1 for row in participants if not row["is_host"])
+    return players + (1 if host_attempts else 0)
+
+
+async def create_channel_room(bot, telegram_id, channel_chat_id, quiz_id, duration):
+    """Publish a quiz to a channel and hand its host a private control card.
+
+    The post is created first so the room has a message to own, exactly like the
+    group flow; the difference is that the session is open from this moment.
+    """
+    minutes = parse_duration(duration)
+    user = await registered_user(telegram_id)
+    await ensure_publish_rights(bot, telegram_id, channel_chat_id)
+    username = (await bot.get_me()).username
+    post = await bot.send_message(
+        chat_id=channel_chat_id,
+        text="📣 <b>Test tayyorlanmoqda…</b>",
+        parse_mode="HTML",
+    )
+    try:
+        async with AsyncSessionLocal() as db:
+            service = MultiplayerQuizService(db)
+            session = await service.create_open_session(
+                quiz_id=quiz_id,
+                duration_minutes=minutes,
+                user=user,
+            )
+            session_id = session.id
+            db.add(TelegramQuizRoom(
+                session_id=session_id,
+                chat_id=channel_chat_id,
+                message_id=post.message_id,
+                bot_username=username,
+            ))
+            quiz = await db.get(Quiz, session.quiz_id)
+            host_control = format_channel_host_control(quiz, session, 0, 0)
+            await db.commit()
+    except Exception:
+        # Nothing owns the post yet, so it would sit in the channel forever.
+        try:
+            await bot.delete_message(chat_id=channel_chat_id, message_id=post.message_id)
+        except Exception:
+            logger.exception("Could not remove the unused channel post")
+        raise
+    try:
+        await publish_room(bot, session_id)
+    except Exception:
+        logger.exception("Could not publish Telegram channel room %s", session_id)
+        queue_room_maintenance(session_id)
+    try:
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=host_control,
+            reply_markup=channel_host_keyboard(session_id),
+            parse_mode="HTML",
+        )
+    except Exception:
+        logger.exception("Could not send channel room %s host control", session_id)
+    return session_id
+
+
+async def channel_control_payload(session_id, telegram_id):
+    """The host's control card as it stands right now."""
+    user = await registered_user(telegram_id)
+    async with AsyncSessionLocal() as db:
+        session = await db.get(QuizSession, session_id)
+        if session is None:
+            raise HTTPException(404, "Test topilmadi.")
+        if session.host_id != user.id:
+            raise HTTPException(403, "Bu test boshqa foydalanuvchiga tegishli.")
+        service = MultiplayerQuizService(db)
+        quiz = await db.get(Quiz, session.quiz_id)
+        participants = await service.participant_repo.get_participant_list(
+            session_id,
+            pagination=False,
+        )
+        players = await channel_player_count(db, session_id, participants)
+        finished = await db.scalar(
+            select(func.count(QuizAttempt.id)).where(
+                QuizAttempt.session_id == session_id,
+                QuizAttempt.finished.is_(True),
+            )
+        )
+    if session.status == "finished":
+        return (
+            format_channel_closed(quiz, session, finished or 0),
+            None,
+        )
+    return (
+        format_channel_host_control(quiz, session, players, finished or 0),
+        channel_host_keyboard(session_id),
+    )
+
+
+async def finish_channel_room(bot, session_id, telegram_id):
+    """Close an open session on the host's command and publish its leaderboard."""
+    user = await registered_user(telegram_id)
+    async with AsyncSessionLocal() as db:
+        await MultiplayerQuizService(db).finish_open_session(session_id, user)
+    try:
+        await publish_room(bot, session_id)
+    except Exception:
+        logger.exception("Could not publish finished channel room %s", session_id)
+        queue_room_maintenance(session_id)
+        raise
+
+
 async def send_room_start_to_participants(
     bot,
     session_id,
@@ -480,8 +715,14 @@ async def send_room_start_to_participants(
             )
 
 
-async def enter_room(message, code):
-    user = await registered_user(message.from_user.id)
+async def enter_room(message, code, telegram_id: int | None = None):
+    """Put a player into a room and reply in ``message``'s chat.
+
+    ``telegram_id`` is passed when the reply hangs off a message the bot itself
+    sent -- right after registration -- because then ``message.from_user`` is
+    the bot, not the player who followed the link.
+    """
+    user = await registered_user(telegram_id or message.from_user.id)
     async with AsyncSessionLocal() as db:
         service = MultiplayerQuizService(db)
         session = await service.session_repo.get_by_join_code(code)
@@ -506,6 +747,18 @@ async def enter_room(message, code):
                 session,
                 participants,
             )
+        elif is_open_session(session) and session.status == "running":
+            # A channel quiz keeps admitting players while it runs, so arriving
+            # late is normal rather than an error.
+            await service.join(session_id, user)
+            await service.finalize_quiz_session(session_id)
+            quiz = await db.get(Quiz, session.quiz_id)
+            join_confirmation = None
+        elif is_open_session(session):
+            # Closed channel quiz: there is nothing left to join, and somebody
+            # who never played is not a participant to check.
+            quiz = await db.get(Quiz, session.quiz_id)
+            join_confirmation = None
         else:
             await service.participant(session_id, user.id)
             await service.finalize_quiz_session(session_id)

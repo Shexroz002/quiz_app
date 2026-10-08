@@ -8,6 +8,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
+    ChatMemberUpdated,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
@@ -25,6 +26,7 @@ from app.bot.handlers.menu import (
     show_quiz_catalog,
 )
 from app.bot.keyboards.inline import CHALLENGE_CALLBACK_PREFIX, challenge_callback
+from app.bot.services.channels import GROUP, remember_chat
 from app.bot.services.quiz_room import create_room, parse_duration
 from app.bot.states import QuizDurationState
 from app.bot.utils.registration import get_user_by_telegram_id
@@ -140,6 +142,23 @@ async def challenge_group_target(
     return chat_id, message_id
 
 
+@router.my_chat_member(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
+async def remember_group_on_join(event: ChatMemberUpdated) -> None:
+    """A group the bot was just added to becomes publishable from the bot.
+
+    Telegram offers no way to ask which groups a bot is in, so the bot notes
+    them down as it is added -- that list is what ``/challenge`` offers later.
+    """
+    if event.new_chat_member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
+        return
+    user = await get_user_by_telegram_id(event.from_user.id)
+    if user is None or not user.is_active:
+        return
+    if not await is_group_admin(event.bot, event.chat.id, event.from_user.id):
+        return
+    await remember_chat(user.id, event.chat.id, event.chat.title or "Guruh", GROUP)
+
+
 @router.message(
     F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}),
     Command("challenge"),
@@ -171,6 +190,10 @@ async def challenge(message: Message, state: FSMContext) -> None:
             reply_markup=keyboard,
         )
         return
+
+    # Using the command here is also proof that this group can be published
+    # to, so it joins the list the bot offers in the private chat.
+    await remember_chat(user.id, message.chat.id, message.chat.title or "Guruh", GROUP)
 
     room_message = await message.answer(
         "🎯 <b>Test xonasi</b>\n\n"

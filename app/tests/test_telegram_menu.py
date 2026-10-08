@@ -62,7 +62,10 @@ class TelegramMenuCatalogTests(IsolatedAsyncioTestCase):
         ) as show_catalog:
             await show_friends_quizzes(callback, state)
 
-        state.update_data.assert_awaited_once_with(quiz_catalog_header_message_id=10)
+        self.assertEqual(
+            [call.kwargs for call in state.update_data.await_args_list],
+            [{"channel_target_chat_id": None}, {"quiz_catalog_header_message_id": 10}],
+        )
         show_catalog.assert_awaited_once_with(
             callback,
             state,
@@ -82,7 +85,11 @@ class TelegramMenuCatalogTests(IsolatedAsyncioTestCase):
             ),
             answer=AsyncMock(),
         )
-        state = SimpleNamespace(set_state=AsyncMock())
+        state = SimpleNamespace(
+            set_state=AsyncMock(),
+            get_data=AsyncMock(return_value={}),
+            update_data=AsyncMock(),
+        )
 
         with (
             patch(

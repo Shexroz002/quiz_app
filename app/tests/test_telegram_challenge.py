@@ -38,7 +38,7 @@ class TelegramChallengeTests(IsolatedAsyncioTestCase):
         )
         message = SimpleNamespace(
             bot=bot,
-            chat=SimpleNamespace(id=-100123),
+            chat=SimpleNamespace(id=-100123, title="Test guruh"),
             from_user=SimpleNamespace(id=42),
             answer=AsyncMock(return_value=room_message),
         )
@@ -55,6 +55,10 @@ class TelegramChallengeTests(IsolatedAsyncioTestCase):
                 new_callable=AsyncMock,
                 return_value=SimpleNamespace(id=7, is_active=True),
             ) as get_user,
+            patch(
+                "app.bot.handlers.challenge.remember_chat",
+                new_callable=AsyncMock,
+            ),
             patch(
                 "app.bot.handlers.challenge.create_start_link",
                 new_callable=AsyncMock,
@@ -135,7 +139,7 @@ class TelegramChallengeTests(IsolatedAsyncioTestCase):
         bot = SimpleNamespace()
         message = SimpleNamespace(
             bot=bot,
-            chat=SimpleNamespace(id=-100123),
+            chat=SimpleNamespace(id=-100123, title="Test guruh"),
             from_user=SimpleNamespace(id=42),
             answer=AsyncMock(),
         )
@@ -151,6 +155,10 @@ class TelegramChallengeTests(IsolatedAsyncioTestCase):
                 "app.bot.handlers.challenge.get_user_by_telegram_id",
                 new_callable=AsyncMock,
                 return_value=None,
+            ),
+            patch(
+                "app.bot.handlers.challenge.remember_chat",
+                new_callable=AsyncMock,
             ),
             patch(
                 "app.bot.handlers.challenge.create_start_link",
@@ -175,7 +183,7 @@ class TelegramChallengeTests(IsolatedAsyncioTestCase):
         bot = SimpleNamespace()
         message = SimpleNamespace(
             bot=bot,
-            chat=SimpleNamespace(id=-100123),
+            chat=SimpleNamespace(id=-100123, title="Test guruh"),
             from_user=SimpleNamespace(id=42),
             answer=AsyncMock(),
         )

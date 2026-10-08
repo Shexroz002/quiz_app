@@ -412,3 +412,23 @@ class DeadlineTests(TestCase):
         deadlines = {call["deadline"] for call in client.calls}
         self.assertEqual(len(deadlines), 1)
         self.assertIsNotNone(deadlines.pop())
+
+
+class BrokenEscapeTests(TestCase):
+    """Seen from mistral-medium: "\\times" and "\\text" arrived with a tab, "\\frac" with a form feed."""
+
+    def test_a_tab_from_times_or_text_is_caught(self):
+        data = solution(check={"say": "Tekshiramiz.", "tex": "a_1 + 4 \times 3 = 15 \text{ va }"})
+        self.assertTrue(any("control character" in e for e in validate(data).hard))
+
+    def test_a_broken_command_in_the_bar_is_caught(self):
+        data = solution(tape={"total": "175 kg", "parts": [
+            {"label": "1-kun", "expr": "x", "weight": 1},
+            {"label": "3-kun", "expr": "\x0crac{2{,}4x}{1{,}5}", "weight": 1.6},
+        ]})
+        self.assertTrue(any("control character" in e for e in validate(data).hard))
+
+    def test_a_carriage_return_from_right_is_caught(self):
+        data = solution()
+        data["steps"][0]["board"][0]["tex"] = "\\left( x \right)"
+        self.assertTrue(any("control character" in e for e in validate(data).hard))

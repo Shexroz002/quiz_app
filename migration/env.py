@@ -14,6 +14,7 @@ from app.models.group.student_group import *
 from app.models.chat.chats import *
 from app.models.chat.chat_members import *
 from app.bot.models import (
+    TelegramChannel,
     TelegramQuizRoom,
     TelegramRoomAnalysisDelivery,
     TelegramSinglePlayerResultDelivery,

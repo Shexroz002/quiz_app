@@ -7,9 +7,11 @@ from aiogram.types import CallbackQuery
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from app.bot.keyboards.quiz_room import player_keyboard
+from app.bot.keyboards.quiz_room import CHANNEL_FINISH, CHANNEL_REFRESH, player_keyboard
 from app.bot.models import TelegramQuizRoom
 from app.bot.services.quiz_room import (
+    channel_control_payload,
+    finish_channel_room,
     format_private_running_room,
     publish_room,
     queue_room_maintenance,
@@ -27,6 +29,55 @@ logger = logging.getLogger(__name__)
 def room_session_id(data: str | None, prefix: str) -> int | None:
     value = (data or "").removeprefix(prefix)
     return int(value) if value.isdigit() else None
+
+
+async def _edit_channel_control(callback: CallbackQuery, session_id: int) -> None:
+    text, keyboard = await channel_control_payload(session_id, callback.from_user.id)
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+
+
+@router.callback_query(F.data.startswith(CHANNEL_REFRESH))
+async def refresh_channel_room(callback: CallbackQuery):
+    session_id = room_session_id(callback.data, CHANNEL_REFRESH)
+    if session_id is None or callback.message is None:
+        await callback.answer("Test havolasi yaroqsiz.", show_alert=True)
+        return
+    try:
+        await _edit_channel_control(callback, session_id)
+    except HTTPException as exc:
+        await callback.answer(str(exc.detail), show_alert=True)
+        return
+    except Exception:
+        logger.exception("Could not refresh channel room %s control", session_id)
+        await callback.answer("Yangilab bo'lmadi.", show_alert=True)
+        return
+    await callback.answer("Yangilandi.")
+
+
+@router.callback_query(F.data.startswith(CHANNEL_FINISH))
+async def finish_channel_quiz(callback: CallbackQuery):
+    session_id = room_session_id(callback.data, CHANNEL_FINISH)
+    if session_id is None or callback.message is None:
+        await callback.answer("Test havolasi yaroqsiz.", show_alert=True)
+        return
+    try:
+        await finish_channel_room(callback.bot, session_id, callback.from_user.id)
+    except HTTPException as exc:
+        await callback.answer(str(exc.detail), show_alert=True)
+        return
+    except Exception:
+        logger.exception("Could not finish channel room %s", session_id)
+        await callback.answer("Testni yakunlab bo'lmadi.", show_alert=True)
+        return
+    try:
+        await _edit_channel_control(callback, session_id)
+    except Exception:
+        logger.exception("Could not close channel room %s control", session_id)
+    await callback.answer("Test yakunlandi.")
 
 
 @router.callback_query(F.data.startswith("room:start:"))
