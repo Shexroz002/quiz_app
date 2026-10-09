@@ -33,14 +33,21 @@ CHANNEL_ID = -1001234567890
 
 
 class _ScalarResult:
-    def __init__(self, value):
+    def __init__(self, value, rows=()):
         self.value = value
+        self.rows = list(rows)
 
     def scalar_one(self):
         return self.value
 
     def scalar_one_or_none(self):
         return self.value
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self.rows
 
 
 class _SessionContext:
@@ -927,6 +934,25 @@ class CoverTests(TestCase):
         for subject in ALLOWED_SUBJECTS:
             with self.subTest(subject=subject):
                 self.assertNotEqual(theme_for(subject), FALLBACK_THEME)
+
+    def test_physics_gets_its_own_drawn_scene(self):
+        """Fizika glif-fonli emas, alohida chizilgan muqovaga ega."""
+        from app.bot.services.covers import render_cover
+
+        drawn = render_cover("Fizika", "Kinematika", 10, 15, seed=5)
+        other = render_cover("Kimyo", "Kinematika", 10, 15, seed=5)
+
+        self.assertNotEqual(drawn, other)
+
+    def test_topics_change_the_physics_cover(self):
+        from app.bot.services.covers import render_cover
+
+        without = render_cover("Fizika", "Kinematika", 10, 15, seed=5)
+        with_topics = render_cover(
+            "Fizika", "Kinematika", 10, 15, seed=5, topics=["Mexanika", "Optika"]
+        )
+
+        self.assertNotEqual(without, with_topics)
 
     def test_an_unknown_subject_still_gets_a_cover(self):
         from app.bot.services.covers import FALLBACK_THEME, render_cover, theme_for

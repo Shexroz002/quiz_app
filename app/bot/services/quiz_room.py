@@ -26,6 +26,7 @@ from app.bot.services.room_analysis import (
 from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
 from app.models import Quiz, QuizAttempt, QuizSession, SessionParticipant, User
+from app.models.quiz import Question
 from app.repositories.quiz.quiz_repo import QuizRepository
 from app.services.quiz.multiplayer import MultiplayerQuizService, is_open_session
 
@@ -606,7 +607,23 @@ async def create_channel_room(bot, telegram_id, channel_chat_id, quiz_id, durati
         if quiz is None:
             raise HTTPException(404, "Test topilmadi yoki sizga tegishli emas.")
         question_count = await repo.quiz_question_count(quiz_id) or 0
-        cover = safe_cover(quiz.subject, quiz.title, question_count, minutes, seed=quiz_id)
+        # The topics the quiz actually covers, most asked first: a reader can
+        # tell what is inside before opening it.
+        topics = (await db.execute(
+            select(Question.topic)
+            .where(
+                Question.quiz_id == quiz_id,
+                Question.topic.is_not(None),
+                Question.topic != "",
+            )
+            .group_by(Question.topic)
+            .order_by(func.count(Question.id).desc())
+            .limit(5)
+        )).scalars().all()
+        cover = safe_cover(
+            quiz.subject, quiz.title, question_count, minutes,
+            seed=quiz_id, topics=topics,
+        )
 
     caption = "📣 <b>Test tayyorlanmoqda…</b>"
     if cover:
