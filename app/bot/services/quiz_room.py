@@ -5,6 +5,7 @@ from html import escape
 
 from aiogram.enums import ChatMemberStatus, ChatType
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.types import BufferedInputFile
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
@@ -17,6 +18,7 @@ from app.bot.keyboards.quiz_room import (
     room_webapp_url,
 )
 from app.bot.models import TelegramQuizRoom
+from app.bot.services.covers import safe_cover
 from app.bot.services.room_analysis import (
     create_room_analysis_deliveries,
     queue_room_analysis_deliveries,
@@ -24,6 +26,7 @@ from app.bot.services.room_analysis import (
 from app.bot.utils.registration import get_user_by_telegram_id
 from app.core.database.base import AsyncSessionLocal
 from app.models import Quiz, QuizAttempt, QuizSession, SessionParticipant, User
+from app.repositories.quiz.quiz_repo import QuizRepository
 from app.services.quiz.multiplayer import MultiplayerQuizService, is_open_session
 
 logger = logging.getLogger(__name__)
@@ -484,12 +487,23 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
         revision = hashlib.sha256(revision_payload.encode()).hexdigest()
         if room.published_revision != revision:
             try:
-                await bot.edit_message_text(
-                    text, chat_id=room.chat_id, message_id=room.message_id,
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                    disable_web_page_preview=True,
-                )
+                if open_room:
+                    # An open quiz is published as a cover picture, and a photo
+                    # message is edited through its caption, not its text.
+                    await bot.edit_message_caption(
+                        chat_id=room.chat_id,
+                        message_id=room.message_id,
+                        caption=text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                    )
+                else:
+                    await bot.edit_message_text(
+                        text, chat_id=room.chat_id, message_id=room.message_id,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                        disable_web_page_preview=True,
+                    )
             except TelegramBadRequest as exc:
                 if "message is not modified" not in str(exc).lower():
                     raise
@@ -583,11 +597,31 @@ async def create_channel_room(bot, telegram_id, channel_chat_id, quiz_id, durati
     user = await registered_user(telegram_id)
     await ensure_publish_rights(bot, telegram_id, channel_chat_id)
     username = (await bot.get_me()).username
-    post = await bot.send_message(
-        chat_id=channel_chat_id,
-        text="📣 <b>Test tayyorlanmoqda…</b>",
-        parse_mode="HTML",
-    )
+
+    # Drawn before anything is created: a quiz that cannot be published should
+    # not leave a post behind, and the picture needs the quiz anyway.
+    async with AsyncSessionLocal() as db:
+        repo = QuizRepository(db)
+        quiz = await repo.get(quiz_id, user.id)
+        if quiz is None:
+            raise HTTPException(404, "Test topilmadi yoki sizga tegishli emas.")
+        question_count = await repo.quiz_question_count(quiz_id) or 0
+        cover = safe_cover(quiz.subject, quiz.title, question_count, minutes, seed=quiz_id)
+
+    caption = "📣 <b>Test tayyorlanmoqda…</b>"
+    if cover:
+        post = await bot.send_photo(
+            chat_id=channel_chat_id,
+            photo=BufferedInputFile(cover, filename="test.jpg"),
+            caption=caption,
+            parse_mode="HTML",
+        )
+    else:
+        post = await bot.send_message(
+            chat_id=channel_chat_id,
+            text=caption,
+            parse_mode="HTML",
+        )
     try:
         async with AsyncSessionLocal() as db:
             service = MultiplayerQuizService(db)

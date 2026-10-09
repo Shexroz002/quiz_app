@@ -277,7 +277,11 @@ class ChannelPostTests(IsolatedAsyncioTestCase):
             quiz_repo=SimpleNamespace(quiz_question_count=AsyncMock(return_value=10)),
             now=AsyncMock(return_value=NOW),
         )
-        bot = SimpleNamespace(edit_message_text=AsyncMock(), send_message=AsyncMock())
+        bot = SimpleNamespace(
+            edit_message_text=AsyncMock(),
+            edit_message_caption=AsyncMock(),
+            send_message=AsyncMock(),
+        )
         db = self._db(session, room, quiz, host_attempts)
         with (
             patch("app.bot.services.quiz_room.MultiplayerQuizService", return_value=service),
@@ -307,12 +311,12 @@ class ChannelPostTests(IsolatedAsyncioTestCase):
 
         bot, _ = await self._publish(open_session(), room, participants=participants)
 
-        text = bot.edit_message_text.await_args.args[0]
+        text = bot.edit_message_caption.await_args.kwargs["caption"]
         self.assertIn("📣 <b>Yangi test</b>", text)
         self.assertIn("Istalgan vaqtda", text)
         # Testni e'lon qilgan admin ishtirokchi emas.
         self.assertIn("👥 1 ishtirokchi", text)
-        self.assertEqual(bot.edit_message_text.await_args.kwargs["reply_markup"], "join-keyboard")
+        self.assertEqual(bot.edit_message_caption.await_args.kwargs["reply_markup"], "join-keyboard")
 
     async def test_a_host_who_took_the_quiz_counts_as_a_player(self):
         # Aks holda karta "1 ishtirokchi · 2 yakunladi" deb ziddiyatli ko'rinadi.
@@ -332,7 +336,7 @@ class ChannelPostTests(IsolatedAsyncioTestCase):
             open_session(), room, participants=participants, host_attempts=1
         )
 
-        self.assertIn("👥 2 ishtirokchi", bot.edit_message_text.await_args.args[0])
+        self.assertIn("👥 2 ishtirokchi", bot.edit_message_caption.await_args.kwargs["caption"])
 
     async def test_finishing_keeps_the_post_and_sends_the_table_separately(self):
         room = SimpleNamespace(
@@ -353,7 +357,7 @@ class ChannelPostTests(IsolatedAsyncioTestCase):
             open_session(status="finished"), room, rows=rows
         )
 
-        edited = bot.edit_message_text.await_args.args[0]
+        edited = bot.edit_message_caption.await_args.kwargs["caption"]
         self.assertIn("🔒 <b>Test yakunlandi</b>", edited)
         sent = bot.send_message.await_args.kwargs
         self.assertEqual(sent["chat_id"], CHANNEL_ID)
@@ -414,6 +418,7 @@ class LateJoinTests(IsolatedAsyncioTestCase):
 class CreateChannelRoomTests(IsolatedAsyncioTestCase):
     def _bot(self, *, author_status="creator"):
         return SimpleNamespace(
+            send_photo=AsyncMock(return_value=SimpleNamespace(message_id=55)),
             get_me=AsyncMock(return_value=SimpleNamespace(id=1, username="edunova_bot")),
             get_chat=AsyncMock(return_value=SimpleNamespace(type="channel")),
             get_chat_member=AsyncMock(side_effect=[
@@ -436,6 +441,10 @@ class CreateChannelRoomTests(IsolatedAsyncioTestCase):
             add=lambda row: added.append(row),
             get=AsyncMock(return_value=SimpleNamespace(subject="Fizika", title="Kinematika")),
             commit=AsyncMock(),
+            execute=AsyncMock(return_value=_ScalarResult(
+                SimpleNamespace(id=4, subject="Fizika", title="Kinematika")
+            )),
+            scalar=AsyncMock(return_value=10),
         )
         added = []
         with (
@@ -444,6 +453,7 @@ class CreateChannelRoomTests(IsolatedAsyncioTestCase):
             patch("app.bot.services.quiz_room.MultiplayerQuizService", return_value=service),
             patch("app.bot.services.quiz_room.AsyncSessionLocal", return_value=_SessionContext(db)),
             patch("app.bot.services.quiz_room.publish_room", new_callable=AsyncMock) as publish,
+            patch("app.bot.services.quiz_room.safe_cover", return_value=b"jpeg-bytes"),
         ):
             if create_error or author_status != "creator":
                 with self.assertRaises(HTTPException):
@@ -455,7 +465,8 @@ class CreateChannelRoomTests(IsolatedAsyncioTestCase):
     async def test_the_post_is_created_first_and_owned_by_the_room(self):
         bot, added, publish, service = await self._create()
 
-        self.assertEqual(bot.send_message.await_args_list[0].kwargs["chat_id"], CHANNEL_ID)
+        # Kanalga avval muqova rasm ketadi, matn emas.
+        self.assertEqual(bot.send_photo.await_args.kwargs["chat_id"], CHANNEL_ID)
         room = added[0]
         self.assertEqual((room.chat_id, room.message_id), (CHANNEL_ID, 55))
         publish.assert_awaited_once_with(bot, 12)
@@ -480,6 +491,7 @@ class CreateChannelRoomTests(IsolatedAsyncioTestCase):
         # joylash paytida qaytadan tekshiriladi.
         bot, added, publish, service = await self._create(author_status="member")
 
+        bot.send_photo.assert_not_awaited()
         bot.send_message.assert_not_awaited()
         self.assertEqual(added, [])
         publish.assert_not_awaited()
@@ -876,6 +888,57 @@ class ChatPickerTests(IsolatedAsyncioTestCase):
 
         state.update_data.assert_not_awaited()
         catalog.assert_not_awaited()
+
+
+class CoverTests(TestCase):
+    """Muqova — testdan chiziladi, hech qanday tayyor rasm ishlatilmaydi."""
+
+    def test_the_cover_is_a_jpeg_sized_for_a_feed(self):
+        from PIL import Image
+        from io import BytesIO
+        from app.bot.services.covers import render_cover
+
+        data = render_cover("Fizika", "Kinematika asoslari", 10, 15, seed=3)
+
+        image = Image.open(BytesIO(data))
+        self.assertEqual((image.width, image.height), (1280, 720))
+        self.assertEqual(image.format, "JPEG")
+
+    def test_the_same_quiz_always_draws_the_same_picture(self):
+        from app.bot.services.covers import render_cover
+
+        first = render_cover("Fizika", "Kinematika", 10, 15, seed=12)
+        second = render_cover("Fizika", "Kinematika", 10, 15, seed=12)
+
+        self.assertEqual(first, second)
+
+    def test_two_quizzes_in_one_subject_look_different(self):
+        from app.bot.services.covers import render_cover
+
+        self.assertNotEqual(
+            render_cover("Fizika", "Kinematika", 10, 15, seed=1),
+            render_cover("Fizika", "Optika", 10, 15, seed=2),
+        )
+
+    def test_every_platform_subject_has_its_own_colour(self):
+        from app.services.ai.subjects import ALLOWED_SUBJECTS
+        from app.bot.services.covers import FALLBACK_THEME, theme_for
+
+        for subject in ALLOWED_SUBJECTS:
+            with self.subTest(subject=subject):
+                self.assertNotEqual(theme_for(subject), FALLBACK_THEME)
+
+    def test_an_unknown_subject_still_gets_a_cover(self):
+        from app.bot.services.covers import FALLBACK_THEME, render_cover, theme_for
+
+        self.assertEqual(theme_for("Chizmachilik"), FALLBACK_THEME)
+        self.assertTrue(render_cover("Chizmachilik", "Test", 5, None, seed=1))
+
+    def test_a_broken_cover_never_blocks_publishing(self):
+        from app.bot.services import covers
+
+        with patch.object(covers, "render_cover", side_effect=OSError("shrift yo'q")):
+            self.assertIsNone(covers.safe_cover("Fizika", "Test", 10, 15))
 
 
 class ChannelTemplateTests(TestCase):
