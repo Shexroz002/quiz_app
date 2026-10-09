@@ -520,6 +520,16 @@ async def publish_room(bot, session_id, session_factory=AsyncSessionLocal):
 CHANNEL_ADMIN_STATUSES = {ChatMemberStatus.CREATOR, ChatMemberStatus.ADMINISTRATOR}
 
 
+class ChatAccessError(HTTPException):
+    """The bot cannot see the chat at all -- it was never added, or was removed.
+
+    Worth its own type: the answer is an invite button, not an explanation.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(status_code=403, detail=detail)
+
+
 CHAT_MEMBER_STATUSES = CHANNEL_ADMIN_STATUSES | {ChatMemberStatus.MEMBER}
 
 
@@ -539,9 +549,11 @@ async def ensure_publish_rights(bot, telegram_id, chat_id) -> None:
         bot_member = await bot.get_chat_member(chat_id, bot_user.id)
         author_member = await bot.get_chat_member(chat_id, telegram_id)
     except TelegramAPIError as exc:
-        raise HTTPException(
-            403,
-            "Chatni tekshira olmadim. Bot hali ham o'sha yerdami?",
+        # A bot cannot read a chat it is not in, so this is what "not added yet"
+        # looks like from here.
+        raise ChatAccessError(
+            "Bot bu chatda yo'q. Avval botni o'sha yerga qo'shing, "
+            "so'ng qaytadan tanlang."
         ) from exc
 
     is_channel = chat.type == ChatType.CHANNEL

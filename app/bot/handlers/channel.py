@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from app.bot.handlers.menu import show_quiz_catalog
 from app.bot.keyboards.channel import (
     CANCEL_TEXT,
+    add_bot_keyboard,
     CHANNEL_NEW,
     CHANNEL_PICK,
     CHANNEL_REQUEST_ID,
@@ -29,7 +30,7 @@ from app.bot.keyboards.channel import (
 )
 from app.bot.keyboards.reply import main_menu_keyboard
 from app.bot.services.channels import CHANNEL, GROUP, remember_chat, remembered_chats
-from app.bot.services.quiz_room import ensure_publish_rights
+from app.bot.services.quiz_room import ChatAccessError, ensure_publish_rights
 from app.bot.states import CHANNEL_TARGET_KEY, ChannelQuizState
 from app.bot.utils.registration import get_user_by_telegram_id
 
@@ -162,14 +163,27 @@ async def receive_picked_chat(message: Message, state: FSMContext) -> None:
     user = await registered(message)
     if user is None:
         return
+    title = shared.title or ("Kanal" if is_channel else "Guruh")
     try:
         await ensure_publish_rights(message.bot, message.from_user.id, shared.chat_id)
+    except ChatAccessError:
+        # The picker lists every chat the person administers, including ones the
+        # bot was never added to; that is a one-tap fix, not an error.
+        bot_user = await message.bot.get_me()
+        logger.info("Picked chat %s has no bot in it", shared.chat_id)
+        await message.answer("Asosiy menyu", reply_markup=main_menu_keyboard())
+        await message.answer(
+            f"<b>{title}</b> — bu yerda bot yo'q.\n\n"
+            "Quyidagi tugma orqali botni qo'shing, so'ng shu chatni qaytadan tanlang.",
+            reply_markup=add_bot_keyboard(bot_user.username, is_channel=is_channel),
+            parse_mode="HTML",
+        )
+        return
     except HTTPException as exc:
         logger.info("Picked chat %s refused: %s", shared.chat_id, exc.detail)
         await message.answer(str(exc.detail), reply_markup=main_menu_keyboard())
         return
 
-    title = shared.title or ("Kanal" if is_channel else "Guruh")
     await remember_chat(user.id, shared.chat_id, title, CHANNEL if is_channel else GROUP)
 
     await state.set_state(None)

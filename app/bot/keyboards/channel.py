@@ -72,6 +72,21 @@ def _admin_rights(**granted: bool) -> ChatAdministratorRights:
     return ChatAdministratorRights(**flags)
 
 
+def add_bot_keyboard(bot_username: str, *, is_channel: bool) -> InlineKeyboardMarkup:
+    """Telegram's own "add this bot" flow, pre-filled for what the quiz needs.
+
+    ``startchannel`` asks for the posting right straight away; ``startgroup``
+    needs no rights at all, so it asks for none.
+    """
+    url = (
+        f"https://t.me/{bot_username}?startchannel=true&admin=post_messages"
+        if is_channel
+        else f"https://t.me/{bot_username}?startgroup=true"
+    )
+    label = "➕ Botni kanalga qo'shish" if is_channel else "➕ Botni guruhga qo'shish"
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label, url=url)]])
+
+
 def chat_picker_keyboard(*, is_channel: bool) -> ReplyKeyboardMarkup:
     """Telegram's own chat list, filtered to what the quiz actually needs.
 

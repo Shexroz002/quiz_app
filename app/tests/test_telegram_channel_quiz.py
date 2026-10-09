@@ -796,6 +796,81 @@ class PublishRightsTests(IsolatedAsyncioTestCase):
         self.assertIn("post yubora olmaydi", caught.exception.detail)
 
 
+class MissingBotTests(IsolatedAsyncioTestCase):
+    """Tanlagich odam admin bo'lgan hamma chatni ko'rsatadi -- bot yo'qlari ham."""
+
+    async def test_an_unreachable_chat_raises_its_own_error(self):
+        from aiogram.exceptions import TelegramBadRequest
+        from app.bot.services.quiz_room import ChatAccessError, ensure_publish_rights
+
+        bot = SimpleNamespace(
+            get_me=AsyncMock(return_value=SimpleNamespace(id=1)),
+            get_chat=AsyncMock(side_effect=TelegramBadRequest(
+                method=SimpleNamespace(), message="chat not found")),
+            get_chat_member=AsyncMock(),
+        )
+
+        with self.assertRaises(ChatAccessError):
+            await ensure_publish_rights(bot, 500, CHANNEL_ID)
+
+    async def _share_into_a_chat_without_the_bot(self, request_id):
+        from aiogram.exceptions import TelegramBadRequest
+        from app.bot.handlers.channel import receive_picked_chat
+
+        message = SimpleNamespace(
+            from_user=SimpleNamespace(id=500),
+            chat_shared=SimpleNamespace(
+                request_id=request_id, chat_id=CHANNEL_ID, title="Fizika guruhi"
+            ),
+            answer=AsyncMock(),
+            bot=SimpleNamespace(
+                get_me=AsyncMock(return_value=SimpleNamespace(id=1, username="edunova_bot")),
+                get_chat=AsyncMock(side_effect=TelegramBadRequest(
+                    method=SimpleNamespace(), message="chat not found")),
+                get_chat_member=AsyncMock(),
+            ),
+        )
+        state = SimpleNamespace(set_state=AsyncMock(), update_data=AsyncMock())
+        with (
+            patch(
+                "app.bot.handlers.channel.get_user_by_telegram_id",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(id=7, is_active=True),
+            ),
+            patch("app.bot.handlers.channel.remember_chat", new_callable=AsyncMock) as remember,
+            patch("app.bot.handlers.channel.show_quiz_catalog", new_callable=AsyncMock) as catalog,
+        ):
+            await receive_picked_chat(message, state)
+        return message, state, remember, catalog
+
+    async def test_a_group_without_the_bot_offers_an_invite_button(self):
+        from app.bot.keyboards.channel import GROUP_REQUEST_ID
+
+        message, state, remember, catalog = await self._share_into_a_chat_without_the_bot(
+            GROUP_REQUEST_ID
+        )
+
+        last = message.answer.await_args
+        self.assertIn("bot yo'q", last.args[0])
+        button = last.kwargs["reply_markup"].inline_keyboard[0][0]
+        self.assertEqual(button.url, "https://t.me/edunova_bot?startgroup=true")
+        # Yetib bo'lmaydigan chat eslab qolinmaydi va tanlanmaydi.
+        remember.assert_not_awaited()
+        catalog.assert_not_awaited()
+        state.update_data.assert_not_awaited()
+
+    async def test_a_channel_without_the_bot_asks_for_the_posting_right(self):
+        from app.bot.keyboards.channel import CHANNEL_REQUEST_ID
+
+        message, *_ = await self._share_into_a_chat_without_the_bot(CHANNEL_REQUEST_ID)
+
+        button = message.answer.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+        self.assertEqual(
+            button.url,
+            "https://t.me/edunova_bot?startchannel=true&admin=post_messages",
+        )
+
+
 class ChatPickerTests(IsolatedAsyncioTestCase):
     """Telegram'ning o'z ro'yxati: guruh uchun /challenge, kanal uchun /kanal."""
 
